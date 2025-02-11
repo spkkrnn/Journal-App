@@ -2,6 +2,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <vector>
+#include <iostream>
 #include <filesystem>
 #include <unistd.h>
 #include <netinet/in.h>
@@ -13,24 +16,64 @@
 #define BUFSIZE 1024
 #define NAME_MAX 128
 #define QUEUE 10
-#define HTML_FILE "index.html"
 
-void construct_header(char *header, char *filename) {
-	char* path = malloc(NAME_MAX * sizeof(char));
-    path = std::filesystem::currentpath();
-	snprintf(header, BUFSIZE, "HTTP/1 200 OK\r\nContent-Type: text/html\r\nContent-Length: %ld\r\n\r\n", filesize);
+namespace Files {
+    const std::string dirPath = std::filesystem::current_path().string() + "/";
+    const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html"};
 }
 
+std::size_t getFileSize(int fileId) {
+    std::string fullPath = Files::dirPath + Files::htmlFiles[fileId];
+    std::size_t fileSize = std::filesystem::file_size(fullPath);
+    return fileSize;
+}
+
+const std::string makeHeader(int fileId) {
+    std::size_t fileSize = getFileSize(fileId);
+	const std::string header = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
+    return header;
+}
+
+int handleRequest(char* request, int &client_fd, int &state) {
+    int fileId = 0;
+    if (request[0] == 'G') {
+        int file;
+        if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
+            perror("file error");
+            close(client_fd);
+            //close(sock);
+            return -1;
+        }
+        const std::string header = makeHeader(fileId);
+        if (write(client_fd, header.c_str(), header.length()) < 0) {
+            perror("writing error");
+            close(file);
+            close(client_fd);
+            //close(sock);
+            return -1;
+        }
+        off_t offset = 0;
+        int sent = 0;
+        while ((sent = sendfile(client_fd, file, &offset, BUFSIZE)) > 0){
+            if (sent < 0) {
+	        perror("sending error");
+	        close(file);
+	        close(client_fd);
+	        //close(sock);
+      	    return -1;
+	    }
+        }
+    }
+    return 0;
+}
 
 int runServer(void) {
     unsigned short port = 8989;
     unsigned short max_port = port + 10; // try 10 times to bind port
     char buffer[BUFSIZE] = {0};
 
-	char header[256];
-	memset(header, 0, 256);
     int file, client_fd;
-    int state = 1;
+    //int state = 1;
 
     // set up socket
     int sock;
@@ -61,7 +104,7 @@ int runServer(void) {
         return -1;
     }
     std::cout << "Socket bound to port " << port << std::endl;
-    setsockopt(sock, IPPROTO_TCP, TCP_CORK, &state, sizeof(state));
+    //setsockopt(sock, IPPROTO_TCP, TCP_CORK, &state, sizeof(state));
 
     while (1) {
         // listen for connections
@@ -90,17 +133,15 @@ int runServer(void) {
         *strchr(file_id, ' ') = 0;
 
         // check file size and open file
-        long filesize;
+        /*long filesize;
         if ((file = open(filename, O_RDONLY)) < 0) { 
             perror("file error");
             close(client_fd);
             close(sock);
             return -1;
-        }
-
-        construct_header(header, filename, filesize);
+        }*/
         // send header and then file
-        if (write(client_fd, header, strlen(header)) < 0) {
+        /*if (write(client_fd, header, strlen(header)) < 0) {
             perror("writing error");
             close(file);
             close(client_fd);
@@ -116,7 +157,7 @@ int runServer(void) {
 	        close(sock);
       	    return -1;
 	    }
-        }
+        }*/
     }
     // close everything
     close(file);
