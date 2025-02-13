@@ -2,20 +2,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
 #include <vector>
 #include <iostream>
 #include <filesystem>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/sendfile.h>
-
-#define BUFSIZE 1024
-#define NAME_MAX 128
-#define QUEUE 10
+#include "guiserver.h"
 
 namespace Files {
     const std::string dirPath = std::filesystem::current_path().string() + "/";
@@ -62,6 +59,7 @@ int handleRequest(char* request, int &client_fd, int &state) {
 	        //close(sock);
       	    return -1;
 	    }
+        close(file);
         }
     }
     return 0;
@@ -70,10 +68,10 @@ int handleRequest(char* request, int &client_fd, int &state) {
 int runServer(void) {
     unsigned short port = 8989;
     unsigned short max_port = port + 10; // try 10 times to bind port
-    char buffer[BUFSIZE] = {0};
+    //char buffer[BUFSIZE] = {0};
 
-    int file, client_fd;
-    //int state = 1;
+    int client_fd;
+    int state = 1;
 
     // set up socket
     int sock;
@@ -116,11 +114,17 @@ int runServer(void) {
         printf("Listening for connections...\n");
 
         // receive connection
-        if ((client_fd = accept(sock, 0, 0)) < 0) {
+        struct sockaddr_in* client_addr;
+        char str_addr[INET_ADDRSTRLEN];
+        char buffer[BUFSIZE] = {0};
+        socklen_t client_len = sizeof(client_addr);
+        if ((client_fd = accept(sock, (struct sockaddr *) &client_addr, &client_len)) < 0) {
             perror("accepting error");
             close(sock);
             return -1;
         }
+        //inet_ntop(AF_INET, &client_addr->sin_addr.s_addr, str_addr, INET_ADDRSTRLEN);
+        //std::cout << "Connected from " << str_addr << std::endl;
         if (recv(client_fd, buffer, BUFSIZE, 0) < 0) {
             perror("receiving error");
             close(sock);
@@ -129,9 +133,9 @@ int runServer(void) {
         }
 
         // process the request
-        char *file_id = buffer + 5;
-        *strchr(file_id, ' ') = 0;
-
+       // char *file_id = buffer + 5;
+        //*strchr(file_id, ' ') = 0;
+        handleRequest(buffer, client_fd, state);
         // check file size and open file
         /*long filesize;
         if ((file = open(filename, O_RDONLY)) < 0) { 
@@ -160,7 +164,7 @@ int runServer(void) {
         }*/
     }
     // close everything
-    close(file);
+    //close(file);
     close(client_fd);
     client_fd = -1;
     close(sock);

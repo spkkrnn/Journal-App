@@ -1,3 +1,5 @@
+#include <string>
+
 #ifndef GUISERVER_H
 #define GUISERVER_H
 
@@ -5,8 +7,8 @@
 #define NAME_MAX 128
 #define QUEUE 10
 
-void makeHeader(int );
-int handleRequest(char *, int &, int &)
+const std::string makeHeader(int );
+int handleRequest(char *, int &, int &);
 int runServer();
 
 #endif
