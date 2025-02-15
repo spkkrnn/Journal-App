@@ -19,6 +19,24 @@ namespace Files {
     const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html"};
 }
 
+class Session {
+    public:
+        std::uint64_t userId;
+        uint8_t state;
+        Session(std::uint64_t id) {
+            userId = id;
+            state = 0;
+        }
+        ~Session() {}
+};
+
+std::uint64_t formUserId(int address, unsigned short port) {
+    std::uint32_t shift32 = -1;
+    std::uint64_t userId = (std::uint64_t) port * (std::uint64_t) shift32;
+    userId += (std::uint64_t) address;
+    return userId;
+}
+
 std::size_t getFileSize(int fileId) {
     std::string fullPath = Files::dirPath + Files::htmlFiles[fileId];
     std::size_t fileSize = std::filesystem::file_size(fullPath);
