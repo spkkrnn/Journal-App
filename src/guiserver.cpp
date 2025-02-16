@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <vector>
 #include <iostream>
 #include <filesystem>
@@ -41,6 +42,10 @@ std::size_t getFileSize(int fileId) {
     std::string fullPath = Files::dirPath + Files::htmlFiles[fileId];
     std::size_t fileSize = std::filesystem::file_size(fullPath);
     return fileSize;
+}
+
+Session processSession(std::uint64_t id, std::map<std::uint64_t, Session>* userList) {
+     
 }
 
 const std::string makeHeader(int fileId) {
@@ -86,11 +91,10 @@ int handleRequest(char* request, int &client_fd, int &state) {
 int runServer(void) {
     unsigned short port = 8989;
     unsigned short max_port = port + 10; // try 10 times to bind port
-    //char buffer[BUFSIZE] = {0};
 
     int client_fd;
     int state = 1;
-
+    std::map<std::uint64_t, Session>* userList = new std::map<uint64_t, Session>;
     // set up socket
     int sock;
     struct sockaddr_in addr;
@@ -133,7 +137,6 @@ int runServer(void) {
 
         // receive connection
         struct sockaddr_in* client_addr;
-        char str_addr[INET_ADDRSTRLEN];
         char buffer[BUFSIZE] = {0};
         socklen_t client_len = sizeof(client_addr);
         if ((client_fd = accept(sock, (struct sockaddr *) &client_addr, &client_len)) < 0) {
@@ -149,7 +152,8 @@ int runServer(void) {
             close(client_fd);
             return -1;
         }
-
+        std::uint64_t id = formUserId(client_addr->sin_addr.s_addr, client_addr->sin_port);
+        Session currentSession = processSession(id, userList);
         // process the request
        // char *file_id = buffer + 5;
         //*strchr(file_id, ' ') = 0;
