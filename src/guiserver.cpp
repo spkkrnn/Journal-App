@@ -1,4 +1,4 @@
-#include <fcntl.h>
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -6,6 +6,7 @@
 #include <vector>
 #include <iostream>
 #include <filesystem>
+#include <fcntl.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -23,12 +24,20 @@ namespace Files {
 class Session {
     public:
         std::uint64_t userId;
-        uint8_t state;
-        Session(std::uint64_t id) {
+        std::time_t startTime;
+        struct sockaddr_in* clientFeed;
+        int getState() {
+            return (int) state;
+        }
+        Session(std::uint64_t id, struct sockaddr_in &fd) {
             userId = id;
             state = 0;
+            startTime = std::time(nullptr);
+            clientFeed = fd;
         }
         ~Session() {}
+    private:
+        std::uint8_t state; // 0 = not authenticated, 1 = logged in
 };
 
 std::uint64_t formUserId(int address, unsigned short port) {
@@ -44,8 +53,11 @@ std::size_t getFileSize(int fileId) {
     return fileSize;
 }
 
-Session processSession(std::uint64_t id, std::map<std::uint64_t, Session>* userList) {
-     
+Session* addSession(std::uint64_t id, struct sockaddr_in& clientFd, std::map<std::uint64_t, Session>* userList) {
+     if (userList.count(id) == 0) {
+        userList[id] = new Session(id, clientFd);
+     }
+     return userList[id];
 }
 
 const std::string makeHeader(int fileId) {
@@ -54,8 +66,8 @@ const std::string makeHeader(int fileId) {
     return header;
 }
 
-int handleRequest(char* request, int &client_fd, int &state) {
-    int fileId = 0;
+int handleRequest(char& request, Session& clientSession) {
+    int fileId = clientSession.getState();
     if (request[0] == 'G') {
         int file;
         if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
@@ -152,12 +164,13 @@ int runServer(void) {
             close(client_fd);
             return -1;
         }
+        std::cout << "Connection from port " << client_addr->sin_port << std::endl;
         std::uint64_t id = formUserId(client_addr->sin_addr.s_addr, client_addr->sin_port);
-        Session currentSession = processSession(id, userList);
+        Session* currentSession = addSession(id, client_fd, userList);
         // process the request
        // char *file_id = buffer + 5;
         //*strchr(file_id, ' ') = 0;
-        handleRequest(buffer, client_fd, state);
+        handleRequest(&buffer, currentSession);
         // check file size and open file
         /*long filesize;
         if ((file = open(filename, O_RDONLY)) < 0) { 
