@@ -66,38 +66,45 @@ const std::string makeHeader(int fileId) {
     return header;
 }
 
-int handleRequest(char& request, Session& clientSession) {
-    int fileId = clientSession.getState();
-    if (request[0] == 'G') {
-        int file;
-        if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
-            perror("file error");
-            close(client_fd);
-            //close(sock);
-            return -1;
-        }
-        const std::string header = makeHeader(fileId);
-        if (write(client_fd, header.c_str(), header.length()) < 0) {
-            perror("writing error");
-            close(file);
-            close(client_fd);
-            //close(sock);
-            return -1;
-        }
-        off_t offset = 0;
-        int sent = 0;
-        while ((sent = sendfile(client_fd, file, &offset, BUFSIZE)) > 0){
-            if (sent < 0) {
-	        perror("sending error");
-	        close(file);
-	        close(client_fd);
-	        //close(sock);
-      	    return -1;
-	    }
-        close(file);
-        }
+int sendResponse(int fileId) {
+    int file;
+    if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
+        perror("file error");
+        close(client_fd);
+        //close(sock);
+        return -1;
     }
-    return 0;
+    const std::string header = makeHeader(fileId);
+    if (write(client_fd, header.c_str(), header.length()) < 0) {
+        perror("writing error");
+        close(file);
+        close(client_fd);
+        //close(sock);
+        return -1;
+    }
+    off_t offset = 0;
+    int sent = 0;
+    while ((sent = sendfile(client_fd, file, &offset, BUFSIZE)) > 0){
+        if (sent < 0) {
+        perror("sending error");
+        close(file);
+        close(client_fd);
+        //close(sock);
+        return -1;
+    }
+    close(file);
+    }
+}
+
+int handleRequest(char& request, Session& clientSession) {
+    int clientState = clientSession.getState();
+    if (request[0] == 'G') { // GET request
+        sendResponse(clientState);
+        return 0;
+    }
+    else if (request[0] == 'P') { // POST request
+        return 0;
+    }
 }
 
 int runServer(void) {
@@ -167,36 +174,12 @@ int runServer(void) {
         std::cout << "Connection from port " << client_addr->sin_port << std::endl;
         std::uint64_t id = formUserId(client_addr->sin_addr.s_addr, client_addr->sin_port);
         Session* currentSession = addSession(id, client_fd, userList);
-        // process the request
-       // char *file_id = buffer + 5;
-        //*strchr(file_id, ' ') = 0;
-        handleRequest(&buffer, currentSession);
-        // check file size and open file
-        /*long filesize;
-        if ((file = open(filename, O_RDONLY)) < 0) { 
-            perror("file error");
-            close(client_fd);
-            close(sock);
-            return -1;
-        }*/
-        // send header and then file
-        /*if (write(client_fd, header, strlen(header)) < 0) {
-            perror("writing error");
-            close(file);
-            close(client_fd);
-            close(sock);
-            return -1;
+        if (userList.size() > QUEUE) {
+            std::cout << "Too many clients." << std::endl;
+            break;
         }
-        off_t offset = 0;
-        while ((sent = sendfile(client_fd, file, &offset, BUFSIZE)) > 0){
-            if (sent < 0) {
-	        perror("sending error");
-	        close(file);
-	        close(client_fd);
-	        close(sock);
-      	    return -1;
-	    }
-        }*/
+        handleRequest(&buffer, currentSession);
+        
     }
     // close everything
     //close(file);

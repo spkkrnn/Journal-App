@@ -5,6 +5,7 @@
 
 #define BUFSIZE 1024
 #define NAME_MAX 128
+#define MAX_TIME 600
 #define QUEUE 10
 
 const std::string makeHeader(int );
