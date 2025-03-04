@@ -1,19 +1,3 @@
-#include <ctime>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <map>
-#include <vector>
-#include <iostream>
-#include <filesystem>
-#include <fcntl.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/sendfile.h>
 #include "guiserver.h"
 
 namespace Files {
@@ -21,24 +5,24 @@ namespace Files {
     const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html"};
 }
 
-class Session {
-    public:
-        std::uint64_t userId;
-        std::time_t startTime;
-        struct sockaddr_in* clientFeed;
-        int getState() {
-            return (int) state;
-        }
-        Session(std::uint64_t id, struct sockaddr_in &fd) {
-            userId = id;
-            state = 0;
-            startTime = std::time(nullptr);
-            clientFeed = fd;
-        }
-        ~Session() {}
-    private:
-        std::uint8_t state; // 0 = not authenticated, 1 = logged in
-};
+inline Session::Session(std::uint64_t userId, int clientFd) // constructor
+    : m_id{ userId }
+    , m_start{ std::time(nullptr) }
+    , m_state{ 0 }
+    , m_feed{ clientFd }
+{
+}
+
+inline bool Session::isAuthenticated() const {
+    if (m_state == 0) {
+        return false;
+    }
+    std::time_t sessionDuration = std::time(nullptr) - m_start;
+    if (sessionDuration > MAX_TIME) {
+        return false;
+    }
+    return true;
+}
 
 std::uint64_t formUserId(int address, unsigned short port) {
     std::uint32_t shift32 = -1;
@@ -53,11 +37,11 @@ std::size_t getFileSize(int fileId) {
     return fileSize;
 }
 
-Session* addSession(std::uint64_t id, struct sockaddr_in& clientFd, std::map<std::uint64_t, Session>* userList) {
-     if (userList.count(id) == 0) {
-        userList[id] = new Session(id, clientFd);
+Session* addSession(std::uint64_t id, int clientFd, std::map<std::uint64_t, Session*>* userList) {
+     if (userList->count(id) == 0) {
+        userList->at(id) = new Session(id, clientFd);
      }
-     return userList[id];
+     return userList->at(id);
 }
 
 const std::string makeHeader(int fileId) {
@@ -66,45 +50,48 @@ const std::string makeHeader(int fileId) {
     return header;
 }
 
-int sendResponse(int fileId) {
+int sendResponse(int fileId, int clientFd) {
     int file;
     if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
         perror("file error");
-        close(client_fd);
+        close(clientFd);
         //close(sock);
         return -1;
     }
     const std::string header = makeHeader(fileId);
-    if (write(client_fd, header.c_str(), header.length()) < 0) {
+    if (write(clientFd, header.c_str(), header.length()) < 0) {
         perror("writing error");
         close(file);
-        close(client_fd);
+        close(clientFd);
         //close(sock);
         return -1;
     }
     off_t offset = 0;
     int sent = 0;
-    while ((sent = sendfile(client_fd, file, &offset, BUFSIZE)) > 0){
+    while ((sent = sendfile(clientFd, file, &offset, BUFSIZE)) > 0){
         if (sent < 0) {
-        perror("sending error");
-        close(file);
-        close(client_fd);
-        //close(sock);
-        return -1;
+            perror("sending error");
+            close(file);
+            close(clientFd);
+            //close(sock);
+            return -1;
+        }
     }
     close(file);
-    }
+    return 0;
 }
 
-int handleRequest(char& request, Session& clientSession) {
-    int clientState = clientSession.getState();
+int handleRequest(char* request, Session* clientSession) {
+    int clientState = clientSession->getState();
+    int clientFeed = clientSession->getFeed();
     if (request[0] == 'G') { // GET request
-        sendResponse(clientState);
+        sendResponse(clientState, clientFeed);
         return 0;
     }
     else if (request[0] == 'P') { // POST request
         return 0;
     }
+    return -1;
 }
 
 int runServer(void) {
@@ -112,8 +99,8 @@ int runServer(void) {
     unsigned short max_port = port + 10; // try 10 times to bind port
 
     int client_fd;
-    int state = 1;
-    std::map<std::uint64_t, Session>* userList = new std::map<uint64_t, Session>;
+    //int state = 1;
+    std::map<std::uint64_t, Session*> * userList = new std::map<uint64_t, Session*>;
     // set up socket
     int sock;
     struct sockaddr_in addr;
@@ -125,7 +112,7 @@ int runServer(void) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    printf("Socket created.\n");
+    std::cout << "Socket created." << std::endl;
 
     // bind sock to addr, change port number if fails
 	while (port < max_port) {
@@ -152,11 +139,11 @@ int runServer(void) {
             close(sock);
 		    return -1;
 	    }
-        printf("Listening for connections...\n");
+        std::cout << "Listening for connections..." << std::endl;
 
         // receive connection
         struct sockaddr_in* client_addr;
-        char buffer[BUFSIZE] = {0};
+        char* buffer = (char*) calloc(BUFSIZE, sizeof(char));
         socklen_t client_len = sizeof(client_addr);
         if ((client_fd = accept(sock, (struct sockaddr *) &client_addr, &client_len)) < 0) {
             perror("accepting error");
@@ -174,12 +161,12 @@ int runServer(void) {
         std::cout << "Connection from port " << client_addr->sin_port << std::endl;
         std::uint64_t id = formUserId(client_addr->sin_addr.s_addr, client_addr->sin_port);
         Session* currentSession = addSession(id, client_fd, userList);
-        if (userList.size() > QUEUE) {
+        if (userList->size() > QUEUE) {
             std::cout << "Too many clients." << std::endl;
             break;
         }
-        handleRequest(&buffer, currentSession);
-        
+        handleRequest(buffer, currentSession);
+        free(buffer);
     }
     // close everything
     //close(file);
