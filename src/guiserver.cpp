@@ -37,16 +37,17 @@ std::size_t getFileSize(int fileId) {
     return fileSize;
 }
 
-Session* addSession(std::uint64_t id, int clientFd, std::map<std::uint64_t, Session*>* userList) {
-     if (userList->count(id) == 0) {
-        userList->at(id) = new Session(id, clientFd);
+std::shared_ptr<Session> addSession(std::uint64_t id, int clientFd, std::map<std::uint64_t, std::shared_ptr<Session>> &userList) {
+     if (userList.empty() || userList.count(id) == 0) {
+        std::shared_ptr<Session> newSession = std::make_shared<Session>(id, clientFd);
+        userList.insert(std::pair<std::uint64_t, std::shared_ptr<Session>>(id, newSession));
      }
-     return userList->at(id);
+     return userList[id];
 }
 
 const std::string makeHeader(int fileId) {
     std::size_t fileSize = getFileSize(fileId);
-	const std::string header = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
+	const std::string header = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
     return header;
 }
 
@@ -81,14 +82,14 @@ int sendResponse(int fileId, int clientFd) {
     return 0;
 }
 
-int handleRequest(char* request, Session* clientSession) {
+int handleRequest(char* request, std::shared_ptr<Session> clientSession) {
     int clientState = clientSession->getState();
     int clientFeed = clientSession->getFeed();
-    if (request[0] == 'G') { // GET request
+    if (*request == 'G') { // GET request
         sendResponse(clientState, clientFeed);
         return 0;
     }
-    else if (request[0] == 'P') { // POST request
+    else if (*request == 'P') { // POST request
         return 0;
     }
     return -1;
@@ -99,8 +100,8 @@ int runServer(void) {
     unsigned short max_port = port + 10; // try 10 times to bind port
 
     int client_fd;
-    //int state = 1;
-    std::map<std::uint64_t, Session*> * userList = new std::map<uint64_t, Session*>;
+    char* buffer = (char*) calloc(BUFSIZE, sizeof(char));
+    std::map<std::uint64_t, std::shared_ptr<Session>> userList;;
     // set up socket
     int sock;
     struct sockaddr_in addr;
@@ -142,8 +143,7 @@ int runServer(void) {
         std::cout << "Listening for connections..." << std::endl;
 
         // receive connection
-        struct sockaddr_in* client_addr;
-        char* buffer = (char*) calloc(BUFSIZE, sizeof(char));
+        struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
         if ((client_fd = accept(sock, (struct sockaddr *) &client_addr, &client_len)) < 0) {
             perror("accepting error");
@@ -158,20 +158,22 @@ int runServer(void) {
             close(client_fd);
             return -1;
         }
-        std::cout << "Connection from port " << client_addr->sin_port << std::endl;
-        std::uint64_t id = formUserId(client_addr->sin_addr.s_addr, client_addr->sin_port);
-        Session* currentSession = addSession(id, client_fd, userList);
-        if (userList->size() > QUEUE) {
+        std::cout << "Connection from port " << client_addr.sin_port << std::endl;
+        std::uint64_t id = formUserId(client_addr.sin_addr.s_addr, client_addr.sin_port);
+        std::shared_ptr<Session> currentSession = addSession(id, client_fd, userList);
+        if (userList.size() > QUEUE) {
             std::cout << "Too many clients." << std::endl;
             break;
         }
         handleRequest(buffer, currentSession);
-        free(buffer);
+        // null the buffer and close client feed
+        memset(buffer, 0, BUFSIZE):
+        close(client_fd);
+        client_fd = -1;
+        break;
     }
     // close everything
-    //close(file);
-    close(client_fd);
-    client_fd = -1;
+    free(buffer);
     close(sock);
 
     return 0;
