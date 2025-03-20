@@ -51,6 +51,30 @@ const std::string makeHeader(int fileId) {
     return header;
 }
 
+const std::string getPayload(char* request) {
+    char* ptr = request;
+    int i;
+    std::uint8_t lineChanges = 0; 
+    for (i = 0; i < BUFSIZE; ++i) {
+        if (*ptr == '\0') {
+            return "";
+        }
+        else if (*ptr == '\r' || *ptr == '\n') {
+            lineChanges++;
+        }
+        else {
+            lineChanges = 0;
+        }
+        ptr++;
+        if (lineChanges == 4) {
+            break;
+        }
+    }
+    const std::size_t contentLen = strnlen(ptr, (BUFSIZE - i - 1));
+    const std::string payload(ptr, contentLen);
+    return payload;
+}
+
 int sendResponse(int fileId, int clientFd) {
     int file;
     if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
@@ -90,6 +114,9 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession) {
         return 0;
     }
     else if (*request == 'P') { // POST request
+        const std::string post = getPayload(request);
+        // test print
+        std::cout << post << std::endl;
         return 0;
     }
     return -1;
@@ -167,7 +194,7 @@ int runServer(void) {
         }
         handleRequest(buffer, currentSession);
         // null the buffer and close client feed
-        memset(buffer, 0, BUFSIZE):
+        memset(buffer, 0, BUFSIZE);
         close(client_fd);
         client_fd = -1;
         break;
