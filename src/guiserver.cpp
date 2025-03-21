@@ -47,7 +47,7 @@ std::shared_ptr<Session> addSession(std::uint64_t id, int clientFd, std::map<std
 
 const std::string makeHeader(int fileId) {
     std::size_t fileSize = getFileSize(fileId);
-	const std::string header = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
+	const std::string header = "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
     return header;
 }
 
@@ -117,6 +117,10 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession) {
         const std::string post = getPayload(request);
         // test print
         std::cout << post << std::endl;
+        // authenticate here
+        clientSession->updateState();
+        clientState = clientSession->getState();
+        sendResponse(clientState, clientFeed);
         return 0;
     }
     return -1;
@@ -197,7 +201,7 @@ int runServer(void) {
         memset(buffer, 0, BUFSIZE);
         close(client_fd);
         client_fd = -1;
-        break;
+        //break;
     }
     // close everything
     free(buffer);

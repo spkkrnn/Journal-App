@@ -34,6 +34,7 @@ class Session {
         Session(std::uint64_t userId, int clientFd);
         int getState() const { return m_state; }
         int getFeed() const { return m_feed; }
+        void updateState() { this->m_state++; }
         bool isAuthenticated() const;
         ~Session() {}
 };
