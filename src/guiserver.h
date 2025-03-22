@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include <csignal>
 #include <map>
 #include <vector>
 #include <iostream>
@@ -12,6 +13,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/sendfile.h>
@@ -20,7 +23,7 @@
 #define GUISERVER_H
 
 #define BUFSIZE 1024
-#define NAME_MAX 128
+#define MAX_NAME 128
 #define MAX_TIME 600
 #define QUEUE 10
 

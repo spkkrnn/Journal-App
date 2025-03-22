@@ -133,6 +133,7 @@ int runServer(void) {
     int client_fd;
     char* buffer = (char*) calloc(BUFSIZE, sizeof(char));
     std::map<std::uint64_t, std::shared_ptr<Session>> userList;;
+
     // set up socket
     int sock;
     struct sockaddr_in addr;

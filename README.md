@@ -7,6 +7,6 @@ A C++ application for making journal entries with a web GUI.
 
 ## Planned features:
 - Password login with libsodium
-- Secure HTTP traffic with libsodium
+- Viewing past entries
 - Database for entries with SQLite
 - Better looking HTML pages with CSS
