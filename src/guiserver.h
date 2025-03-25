@@ -43,7 +43,7 @@ class Session {
 };
 
 const std::string makeHeader(int );
-int handleRequest(char *, Session *);
+int handleRequest(char *, std::shared_ptr<Session> );
 int runServer();
 
 #endif
