@@ -1,21 +1,27 @@
 #include "data.h"
 
+static char* tmpKey = nullptr;
+
 static int callback(void* data, int argc, char** argv, char** colNames) 
 { 
-    fprintf(stderr, "%s: ", (const char*)data); 
-  
+    /*fprintf(stderr, "%s: ", (const char*)data); 
     for (int i = 0; i < argc; i++) { 
         printf("%s = %s\n", colNames[i], argv[i] ? argv[i] : "NULL"); 
-    } 
-  
-    printf("\n"); 
+    }*/
+    tmpKey = (char*) malloc(PWBUFSIZE);
+    strncpy(tmpKey, argv[0], PWBUFSIZE);
     return 0; 
 } 
 
-int sqlExecute(sqlite3 *db, std::string command) {
+int sqlExecute(sqlite3 *db, std::string command, bool returnData=false) {
     int sqlError = 0;
     char* errMsg;
-    sqlError = sqlite3_exec(db, command.c_str(), NULL, 0, &errMsg);
+    if (returnData) {
+        sqlError = sqlite3_exec(db, command.c_str(), callback, 0, &errMsg);
+    }
+    else {
+        sqlError = sqlite3_exec(db, command.c_str(), NULL, 0, &errMsg);
+    }
     if (sqlError != SQLITE_OK) {
         std::cout << "Failed to execute SQL command." << std::endl;
         sqlite3_free(errMsg);
@@ -25,6 +31,10 @@ int sqlExecute(sqlite3 *db, std::string command) {
 }
 
 int checkPassword(sqlite3 *db, std::string passwd) {
+    std::string sqlQuery = "SELECT PASSWORD FROM JKEYS;";
+    sqlExecute(db, sqlQuery, true);
+    std::cout << "Saved pw: " << tmpKey << std::endl;
+    free(tmpKey);
     /*FILE* hfile = fopen(HFILE_PATH, "r");
     char* rhash = (char*) malloc(crypto_pwhash_STRBYTES);
     if (fgets(rhash, crypto_pwhash_STRBYTES, hfile) == NULL) {
@@ -57,17 +67,20 @@ int hashPassword(std::string passwd, char* stored) {
         return -1;
     }
     strncpy(stored, hashed, crypto_pwhash_STRBYTES);
+    std::cout << "Set pw: " << hashed << std::endl;
     return 0;
 }
 
 bool setPassword(sqlite3 *db, std::string password) {
     char* hashedPw = (char*) malloc(crypto_pwhash_STRBYTES);
     if (hashPassword(password, hashedPw) < 0) {
+        free(hashedPw);
         return false;
     }
     std::string strHash(hashedPw);
-    std::string sqlCommand = "INSERT INTO Keys (PASSWORD) \nVALUES(" + strHash + ");";
-    if (sqlExecute(db, sqlCommand) < 0) {
+    free(hashedPw);
+    std::string sqlCommand = "INSERT INTO JKEYS (PASSWORD) VALUES(\'" + strHash + "\');";
+    if (sqlExecute(db, sqlCommand, false) < 0) {
         return false;
     }
     return true;

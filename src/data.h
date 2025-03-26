@@ -9,8 +9,10 @@
 #define DATA_H
 
 #define DBFILE "pages.db"
+#define PWBUFSIZE 256
 
-int sqlExecute(sqlite3 *, std::string);
+int sqlExecute(sqlite3 *, std::string, bool );
 bool setPassword(sqlite3 *, std::string );
+int checkPassword(sqlite3 *, std::string );
 
 #endif

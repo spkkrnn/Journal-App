@@ -3,10 +3,11 @@
 
 int main(int argc, char* argv[]) {
     if (argc == 2) {
-        std::string flag(argv[1], MAX_NAME);
+        std::string flag(argv[1]);
         if (flag[0] == '-') {
             flag.erase(0, 1);
         }
+        std::cout << "Set flag: " << flag << std::endl;
         if (flag == "install") {
             std::cout << "*** INSTALLATION ***" << std::endl;
             std::string pw;
@@ -21,8 +22,8 @@ int main(int argc, char* argv[]) {
                 std::cout << "Could not create database." << std::endl;
                 return -1;
             }
-            std::string sqlCommand = "CREATE TABLE Keys (\nPASSWORD BINARY NOT NULL\nPRIMARY KEY (PASSWORD);";
-            if (sqlExecute(database, sqlCommand) < 0) {
+            std::string sqlCommand = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT\tNULL );";
+            if (sqlExecute(database, sqlCommand, false) < 0) {
                 std::cout << "Failed to create table." << std::endl;
                 sqlite3_close(database);
                 return -1;
@@ -32,6 +33,8 @@ int main(int argc, char* argv[]) {
                 sqlite3_close(database);
                 return -1;
             }
+            std::cout << "Checking password" << std::endl;
+            checkPassword(database, pw);
             sqlite3_close(database);
         }
         else if (flag == "run") {
