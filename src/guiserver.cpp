@@ -1,4 +1,5 @@
 #include "guiserver.h"
+#include "data.h"
 
 namespace Files {
     const std::string dirPath = std::filesystem::current_path().string() + "/";
@@ -75,6 +76,15 @@ const std::string getPayload(char* request) {
     return payload;
 }
 
+int sendHeader(std::string header, int clientFd) {
+    if (write(clientFd, header.c_str(), header.length()) < 0) {
+        perror("writing error");
+        close(clientFd);
+        return -1;
+    }
+    return 0;
+}
+
 int sendResponse(int fileId, int clientFd) {
     int file;
     if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
@@ -84,11 +94,8 @@ int sendResponse(int fileId, int clientFd) {
         return -1;
     }
     const std::string header = makeHeader(fileId);
-    if (write(clientFd, header.c_str(), header.length()) < 0) {
-        perror("writing error");
+    if (sendHeader(header, clientFd) < 0) {
         close(file);
-        close(clientFd);
-        //close(sock);
         return -1;
     }
     off_t offset = 0;
@@ -106,7 +113,7 @@ int sendResponse(int fileId, int clientFd) {
     return 0;
 }
 
-int handleRequest(char* request, std::shared_ptr<Session> clientSession) {
+int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3* db) {
     int clientState = clientSession->getState();
     int clientFeed = clientSession->getFeed();
     if (*request == 'G') { // GET request
@@ -118,6 +125,18 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession) {
         // test print
         std::cout << post << std::endl;
         // authenticate here
+        if (post.find(HTML_PW_ID) == 0) {
+            size_t divPos = post.find("=");
+            if (divPos < 0 || (divPos >= post.length())) {
+                return -1;
+            }
+            std::string pw = post.substr(divPos + 1);
+            if (checkPassword(db, pw) < 1) {
+                std::string header = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n403 Forbidden";
+                sendHeader(header, clientFeed);
+                return 0;
+            }
+        }
         clientSession->updateState();
         clientState = clientSession->getState();
         sendResponse(clientState, clientFeed);
@@ -126,7 +145,7 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession) {
     return -1;
 }
 
-int runServer(void) {
+int runServer(sqlite3* db) {
     unsigned short port = 8989;
     unsigned short max_port = port + 10; // try 10 times to bind port
 
@@ -197,7 +216,7 @@ int runServer(void) {
             std::cout << "Too many clients." << std::endl;
             break;
         }
-        handleRequest(buffer, currentSession);
+        handleRequest(buffer, currentSession, db);
         // null the buffer and close client feed
         memset(buffer, 0, BUFSIZE);
         close(client_fd);

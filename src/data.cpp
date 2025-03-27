@@ -4,16 +4,12 @@ static char* tmpKey = nullptr;
 
 static int callback(void* data, int argc, char** argv, char** colNames) 
 { 
-    /*fprintf(stderr, "%s: ", (const char*)data); 
-    for (int i = 0; i < argc; i++) { 
-        printf("%s = %s\n", colNames[i], argv[i] ? argv[i] : "NULL"); 
-    }*/
-    tmpKey = (char*) malloc(PWBUFSIZE);
-    strncpy(tmpKey, argv[0], PWBUFSIZE);
-    return 0; 
+    tmpKey = (char*) malloc(crypto_pwhash_STRBYTES);
+    strncpy(tmpKey, argv[0], crypto_pwhash_STRBYTES);
+    return 0;
 } 
 
-int sqlExecute(sqlite3 *db, std::string command, bool returnData=false) {
+int sqlExecute(sqlite3* db, std::string command, bool returnData=false) {
     int sqlError = 0;
     char* errMsg;
     if (returnData) {
@@ -30,28 +26,24 @@ int sqlExecute(sqlite3 *db, std::string command, bool returnData=false) {
     return 0;
 }
 
-int checkPassword(sqlite3 *db, std::string passwd) {
+int checkPassword(sqlite3* db, std::string passwd) {
     std::string sqlQuery = "SELECT PASSWORD FROM JKEYS;";
-    sqlExecute(db, sqlQuery, true);
-    std::cout << "Saved pw: " << tmpKey << std::endl;
-    free(tmpKey);
-    /*FILE* hfile = fopen(HFILE_PATH, "r");
-    char* rhash = (char*) malloc(crypto_pwhash_STRBYTES);
-    if (fgets(rhash, crypto_pwhash_STRBYTES, hfile) == NULL) {
-        fclose(hfile);
-        free(rhash);
-        perror("Error reading file.");
+    int retval = 0;
+    if ((retval = sqlExecute(db, sqlQuery, true)) < 0) {
         return -1;
     }
-    if (crypto_pwhash_str_verify(rhash, passwd, pwlen) != 0) {
-        printf("Wrong password!\n");
+    size_t pwLength = passwd.length();
+    const char* charPw = passwd.c_str();
+    if (crypto_pwhash_str_verify(tmpKey, charPw, pwLength) != 0) {
+        std:: cout << "Wrong password!" << std::endl;
     }
     else {
-        printf("Password correct!\n");
+        std::cout << "Password correct!" << std::endl;
+        retval = 1;
     }
-    fclose(hfile);
-    free(rhash);*/
-    return 0;
+    memset(tmpKey, 0, crypto_pwhash_STRBYTES);
+    free(tmpKey);
+    return retval;
 }
 
 int hashPassword(std::string passwd, char* stored) {
@@ -60,10 +52,6 @@ int hashPassword(std::string passwd, char* stored) {
     size_t pwLength = passwd.length();
     if (crypto_pwhash_str(hashed, p_passwd, pwLength, crypto_pwhash_OPSLIMIT_MODERATE, crypto_pwhash_MEMLIMIT_MODERATE) != 0) {
         perror("Out of memory.");
-        return -1;
-    }
-    if (crypto_pwhash_str_verify(hashed, p_passwd, pwLength) != 0) {
-        perror("Invalid password.");
         return -1;
     }
     strncpy(stored, hashed, crypto_pwhash_STRBYTES);

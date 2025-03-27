@@ -18,14 +18,16 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/sendfile.h>
+#include <sqlite3.h>
 
 #ifndef GUISERVER_H
 #define GUISERVER_H
 
-#define BUFSIZE 1024
+#define BUFSIZE 2048
 #define MAX_NAME 128
 #define MAX_TIME 600
 #define QUEUE 10
+#define HTML_PW_ID "skey"
 
 class Session {
     private:
@@ -43,7 +45,7 @@ class Session {
 };
 
 const std::string makeHeader(int );
-int handleRequest(char *, std::shared_ptr<Session> );
-int runServer();
+int handleRequest(char *, std::shared_ptr<Session>, sqlite3* );
+int runServer(sqlite3* );
 
 #endif

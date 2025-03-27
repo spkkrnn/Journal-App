@@ -10,6 +10,7 @@
 
 #define DBFILE "pages.db"
 #define PWBUFSIZE 256
+#define MINPWLEN 8
 
 int sqlExecute(sqlite3 *, std::string, bool );
 bool setPassword(sqlite3 *, std::string );
