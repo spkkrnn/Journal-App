@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
         if (flag == "install") {
             std::cout << "*** INSTALLATION ***" << std::endl;
             std::string pw;
-            std::cout << "Please set password:" << std::endl;
+            std::cout << "Please set password:" << std::endl; // special characters may be a problem
             std::cin >> std::setw(MAX_NAME) >> pw;
             if (pw.length() < MINPWLEN) {
                 std::cout << "Password must be at least " << MINPWLEN << " characters. Exiting." << std::endl; 
@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
                 sqlite3_close(database);
                 return -1;
             }
-            std::cout << "Checking password" << std::endl;
+            std::cout << "Verifying that password was saved correctly." << std::endl;
             checkPassword(database, pw);
             sqlite3_close(database);
         }
