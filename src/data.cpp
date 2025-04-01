@@ -9,7 +9,7 @@ static int callback(void* data, int argc, char** argv, char** colNames)
     return 0;
 } 
 
-int sqlExecute(sqlite3* db, std::string command, bool returnData=false) {
+int sqlExecute(sqlite3* db, const std::string command, bool returnData=false) {
     int sqlError = 0;
     char* errMsg;
     if (returnData) {
@@ -27,8 +27,8 @@ int sqlExecute(sqlite3* db, std::string command, bool returnData=false) {
 }
 
 int checkPassword(sqlite3* db, std::string passwd) {
-    std::string sqlQuery = "SELECT PASSWORD FROM JKEYS;";
-    int retval = 0;
+    const std::string sqlQuery = "SELECT PASSWORD FROM JKEYS;";
+    int retval = 0; // magic return value
     if ((retval = sqlExecute(db, sqlQuery, true)) < 0) {
         return -1;
     }
@@ -67,9 +67,16 @@ bool setPassword(sqlite3 *db, std::string password) {
     }
     std::string strHash(hashedPw);
     free(hashedPw);
-    std::string sqlCommand = "INSERT INTO JKEYS (PASSWORD) VALUES(\'" + strHash + "\');";
+    const std::string sqlCommand = "INSERT INTO JKEYS (PASSWORD) VALUES(\'" + strHash + "\');";
     if (sqlExecute(db, sqlCommand, false) < 0) {
         return false;
     }
     return true;
+}
+
+int saveEntry(sqlite3* db, std::string journalEntry) {
+    std::time_t saveTime = std::time(nullptr);
+    const std::string sqlCommand = "INSERT INTO JENTRIES VALUES(" + std::to_string(saveTime) + ", \'" + journalEntry +  "\');";
+    int retval = sqlExecute(db, sqlCommand, false);
+    return retval;
 }

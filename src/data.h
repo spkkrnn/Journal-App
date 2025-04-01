@@ -1,4 +1,5 @@
 #include <string>
+#include <ctime>
 #include <cstdio>
 #include <cstring>
 #include <iostream>

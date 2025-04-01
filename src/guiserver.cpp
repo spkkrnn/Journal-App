@@ -1,10 +1,4 @@
 #include "guiserver.h"
-#include "data.h"
-
-namespace Files {
-    const std::string dirPath = std::filesystem::current_path().string() + "/";
-    const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html"};
-}
 
 inline Session::Session(std::uint64_t userId, int clientFd) // constructor
     : m_id{ userId }
@@ -44,6 +38,17 @@ std::shared_ptr<Session> addSession(std::uint64_t id, int clientFd, std::map<std
         userList.insert(std::pair<std::uint64_t, std::shared_ptr<Session>>(id, newSession));
      }
      return userList[id];
+}
+
+void popWhitespaces(std::string& passwd) {
+    if (passwd.length() < 1) {
+        return;
+    } 
+    char c = passwd.back();
+    if (c == '\n' || c == '\r' || c == ' ') {
+        passwd.pop_back();
+        popWhitespaces(passwd);
+    }
 }
 
 const std::string makeHeader(int fileId) {
@@ -90,7 +95,6 @@ int sendResponse(int fileId, int clientFd) {
     if ((file = open(Files::htmlFiles[fileId].c_str(), O_RDONLY)) < 0) { 
         perror("file error");
         close(clientFd);
-        //close(sock);
         return -1;
     }
     const std::string header = makeHeader(fileId);
@@ -105,7 +109,6 @@ int sendResponse(int fileId, int clientFd) {
             perror("sending error");
             close(file);
             close(clientFd);
-            //close(sock);
             return -1;
         }
     }
@@ -124,20 +127,30 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         const std::string post = getPayload(request);
         // test print
         std::cout << post << std::endl;
-        // authenticate here
+        size_t divPos = post.find("=");
+        if (divPos < 0 || (divPos >= post.length())) {
+            return -1;
+        }
         if (post.find(HTML_PW_ID) == 0) {
-            size_t divPos = post.find("=");
-            if (divPos < 0 || (divPos >= post.length())) {
-                return -1;
-            }
             std::string pw = post.substr(divPos + 1);
+            popWhitespaces(pw);
             if (checkPassword(db, pw) < 1) {
-                std::string header = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n403 Forbidden";
+                std::string header = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n403 Forbiddenr\n\r\n";
                 sendHeader(header, clientFeed);
+                clientSession->updateState(0);
                 return 0;
             }
+            clientSession->updateState(1);
         }
-        clientSession->updateState();
+        else if (post.find(HTML_TXT_ID) == 0) {
+            if (!clientSession->isAuthenticated()) {
+                std::string header = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n403 Unauthorized\r\nNot logged in or session timed out.r\n\r\n";
+                sendHeader(header, clientFeed);
+                clientSession->updateState(0);
+                return 0;
+            }
+            // save post to database
+        }
         clientState = clientSession->getState();
         sendResponse(clientState, clientFeed);
         return 0;

@@ -7,6 +7,8 @@ int main(int argc, char* argv[]) {
         if (flag[0] == '-') {
             flag.erase(0, 1);
         }
+        // check if database exists
+        bool installed = std::filesystem::exists(Files::dirPath + DBFILE);
         // open SQL database
         sqlite3* database;
         int sqlError = 0;
@@ -17,6 +19,11 @@ int main(int argc, char* argv[]) {
         }
 
         if (flag == "install") {
+            if (installed) {
+                std::cout << "Database found. Already installed." << std::endl;
+                sqlite3_close(database);
+                return 0;
+            }
             std::cout << "*** INSTALLATION ***" << std::endl;
             std::string pw;
             std::cout << "Please set password:" << std::endl; // special characters may be a problem
@@ -25,9 +32,15 @@ int main(int argc, char* argv[]) {
                 std::cout << "Password must be at least " << MINPWLEN << " characters. Exiting." << std::endl; 
                 return 0;
             }
-            std::string sqlCommand = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT\tNULL );";
-            if (sqlExecute(database, sqlCommand, false) < 0) {
-                std::cout << "Failed to create table." << std::endl;
+            const std::string pwTable = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT\tNULL );";
+            if (sqlExecute(database, pwTable, false) < 0) {
+                std::cout << "Failed to create table for passwords." << std::endl;
+                sqlite3_close(database);
+                return -1;
+            }
+            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP NOT NULL, JENTRY TEXT NOT NULL );";
+            if (sqlExecute(database, entriesTable, false) < 0) {
+                std::cout << "Failed to create table for journal entries." << std::endl;
                 sqlite3_close(database);
                 return -1;
             }
@@ -38,12 +51,12 @@ int main(int argc, char* argv[]) {
             }
             std::cout << "Verifying that password was saved correctly." << std::endl;
             checkPassword(database, pw);
-            sqlite3_close(database);
         }
         else if (flag == "run") {
             std::cout << "Initializing..." << std::endl;
             runServer(database);
         }
+        sqlite3_close(database);
     }
     else {
         std::cout << "Usage:\ninstall\n\tUse flag install to set password and to start use." << std::endl;

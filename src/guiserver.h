@@ -1,24 +1,16 @@
-#include <ctime>
+#include "data.h"
 #include <cstdlib>
-#include <string>
-#include <cstdio>
-#include <cstring>
-#include <csignal>
 #include <map>
 #include <vector>
-#include <iostream>
 #include <filesystem>
 #include <fcntl.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/sendfile.h>
-#include <sqlite3.h>
 
 #ifndef GUISERVER_H
 #define GUISERVER_H
@@ -28,6 +20,12 @@
 #define MAX_TIME 600
 #define QUEUE 10
 #define HTML_PW_ID "skey"
+#define HTML_TXT_ID "entry"
+
+namespace Files {
+    const std::string dirPath = std::filesystem::current_path().string() + "/";
+    const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html"};
+}
 
 class Session {
     private:
@@ -39,7 +37,7 @@ class Session {
         Session(std::uint64_t userId, int clientFd);
         int getState() const { return m_state; }
         int getFeed() const { return m_feed; }
-        void updateState() { this->m_state++; }
+        void updateState(int newState) { this->m_state = newState; }
         bool isAuthenticated() const;
         ~Session() {}
 };
