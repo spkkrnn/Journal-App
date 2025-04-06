@@ -7,6 +7,20 @@ static int callback(void* data, int argc, char** argv, char** colNames)
     tmpKey = (char*) malloc(crypto_pwhash_STRBYTES);
     strncpy(tmpKey, argv[0], crypto_pwhash_STRBYTES);
     return 0;
+}
+
+static int callbackPrint(void* data, int argc, char** argv, char** colNames) 
+{ 
+    int i; 
+    //fprintf(stderr, "%s: ", (const char*)data); 
+  
+    for (i = 0; i < argc; i++) {
+        std::string row = (argv[i] ? argv[i] : "NULL");
+        std::cout << colNames[i] << ": " << row << std::endl;
+        //printf("%s = %s\n", colNames[i], argv[i] ? argv[i] : "NULL"); 
+    } 
+    std::cout << std::endl;
+    return 0; 
 } 
 
 int sqlExecute(sqlite3* db, const std::string command, bool returnData=false) {
@@ -79,4 +93,17 @@ int saveEntry(sqlite3* db, std::string journalEntry) {
     const std::string sqlCommand = "INSERT INTO JENTRIES VALUES(" + std::to_string(saveTime) + ", \'" + journalEntry +  "\');";
     int retval = sqlExecute(db, sqlCommand, false);
     return retval;
+}
+
+int printEntries(sqlite3* db) {
+    int sqlError = 0;
+    char* errMsg;
+    std::string sqlCommand = "SELECT * FROM JENTRIES;";
+    sqlError = sqlite3_exec(db, sqlCommand.c_str(), callbackPrint, 0, &errMsg);
+    if (sqlError != SQLITE_OK) {
+        std::cout << "Failed to execute SQL command." << std::endl;
+        sqlite3_free(errMsg);
+        return -1;
+    }
+    return 0;
 }

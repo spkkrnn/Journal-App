@@ -45,8 +45,8 @@
 <br>
 <form action="/mainpage.html" method="POST" onsubmit="showLoading()">
     <label for="skey">Key:</label><br>
-    <input type="password" id="skey" name="skey" required/>
-    <input type="submit" value="Enter"/>
+    <input type="password" id="skey" name="skey" maxlength="128" required/>
+    <input type="submit" value="Enter" formenctype="text/plain"/>
 </form>
 <br>
 <div id="loadicon" class="loader"></div>

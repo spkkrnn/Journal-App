@@ -14,14 +14,15 @@ inline bool Session::isAuthenticated() const {
     }
     std::time_t sessionDuration = std::time(nullptr) - m_start;
     if (sessionDuration > MAX_TIME) {
+        std::cout << "Session has timed out with duration " << sessionDuration << std::endl;
         return false;
     }
     return true;
 }
 
-std::uint64_t formUserId(int address, unsigned short port) {
+std::uint64_t formUserId(int address) { // NOTE: Port is unusable since browsers change port every request
     std::uint32_t shift32 = -1;
-    std::uint64_t userId = (std::uint64_t) port * (std::uint64_t) shift32;
+    std::uint64_t userId = (std::uint64_t) address * (std::uint64_t) shift32; // renewed method
     userId += (std::uint64_t) address;
     return userId;
 }
@@ -40,20 +41,20 @@ std::shared_ptr<Session> addSession(std::uint64_t id, int clientFd, std::map<std
      return userList[id];
 }
 
-void popWhitespaces(std::string& passwd) {
-    if (passwd.length() < 1) {
+void popWhitespaces(std::string& text) {
+    if (text.length() < 1) {
         return;
     } 
-    char c = passwd.back();
+    char c = text.back();
     if (c == '\n' || c == '\r' || c == ' ') {
-        passwd.pop_back();
-        popWhitespaces(passwd);
+        text.pop_back();
+        popWhitespaces(text);
     }
 }
 
 const std::string makeHeader(int fileId) {
     std::size_t fileSize = getFileSize(fileId);
-	const std::string header = "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
+	const std::string header = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
     return header;
 }
 
@@ -131,11 +132,11 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         if (divPos < 0 || (divPos >= post.length())) {
             return -1;
         }
+        std::string postContent = post.substr(divPos + 1);
+        popWhitespaces(postContent);
         if (post.find(HTML_PW_ID) == 0) {
-            std::string pw = post.substr(divPos + 1);
-            popWhitespaces(pw);
-            if (checkPassword(db, pw) < 1) {
-                std::string header = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n403 Forbiddenr\n\r\n";
+            if (checkPassword(db, postContent) < 1) {
+                std::string header = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\n403 Forbidden\r\n";
                 sendHeader(header, clientFeed);
                 clientSession->updateState(0);
                 return 0;
@@ -144,12 +145,16 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         }
         else if (post.find(HTML_TXT_ID) == 0) {
             if (!clientSession->isAuthenticated()) {
-                std::string header = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n403 Unauthorized\r\nNot logged in or session timed out.r\n\r\n";
+                std::string header = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 53\r\n\r\n403 Unauthorized\r\nNot logged in or session timed out.\r\n";
                 sendHeader(header, clientFeed);
                 clientSession->updateState(0);
                 return 0;
             }
-            // save post to database
+            int newState = (saveEntry(db, postContent) < 0) ? 1 : 2;
+            clientSession->updateState(newState);
+            // test print
+            //printEntries(db);
+
         }
         clientState = clientSession->getState();
         sendResponse(clientState, clientFeed);
@@ -164,7 +169,7 @@ int runServer(sqlite3* db) {
 
     int client_fd;
     char* buffer = (char*) calloc(BUFSIZE, sizeof(char));
-    std::map<std::uint64_t, std::shared_ptr<Session>> userList;;
+    std::map<std::uint64_t, std::shared_ptr<Session>> userList;
 
     // set up socket
     int sock;
@@ -195,7 +200,6 @@ int runServer(sqlite3* db) {
         return -1;
     }
     std::cout << "Socket bound to port " << port << std::endl;
-    //setsockopt(sock, IPPROTO_TCP, TCP_CORK, &state, sizeof(state));
 
     while (1) {
         // listen for connections
@@ -223,7 +227,7 @@ int runServer(sqlite3* db) {
             return -1;
         }
         std::cout << "Connection from port " << client_addr.sin_port << std::endl;
-        std::uint64_t id = formUserId(client_addr.sin_addr.s_addr, client_addr.sin_port);
+        std::uint64_t id = formUserId(client_addr.sin_addr.s_addr);
         std::shared_ptr<Session> currentSession = addSession(id, client_fd, userList);
         if (userList.size() > QUEUE) {
             std::cout << "Too many clients." << std::endl;
@@ -235,6 +239,9 @@ int runServer(sqlite3* db) {
         close(client_fd);
         client_fd = -1;
         //break;
+        if (currentSession->getState() == 2) {
+            break;
+        }
     }
     // close everything
     free(buffer);

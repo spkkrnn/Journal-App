@@ -15,7 +15,6 @@
 #ifndef GUISERVER_H
 #define GUISERVER_H
 
-#define BUFSIZE 2048
 #define MAX_NAME 128
 #define MAX_TIME 600
 #define QUEUE 10
@@ -24,7 +23,7 @@
 
 namespace Files {
     const std::string dirPath = std::filesystem::current_path().string() + "/";
-    const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html"};
+    const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html", "saved.html"};
 }
 
 class Session {
