@@ -1,6 +1,13 @@
 #include "data.h"
 #include "guiserver.h"
 
+void printHelp() {
+    std::cout << "Usage:\ninstall\n\tUse flag install to set password and to start use." << std::endl;
+    std::cout << "run\n\tUse flag run to run the program." << std::endl;
+    std::cout << "show\n\tYou can print all journal entries with the show flag." << std::endl;
+    std::cout << "reset\n\tTo change the password, use flag reset." << std::endl;
+}
+
 int main(int argc, char* argv[]) {
     if (argc == 2) {
         std::string flag(argv[1]);
@@ -26,10 +33,11 @@ int main(int argc, char* argv[]) {
             }
             std::cout << "*** INSTALLATION ***" << std::endl;
             std::string pw;
-            std::cout << "Please set password:" << std::endl; // special characters may be a problem
+            std::cout << "Please set password:" << std::endl;
             std::cin >> std::setw(MAX_NAME) >> pw;
             if (pw.length() < MINPWLEN) {
                 std::cout << "Password must be at least " << MINPWLEN << " characters. Exiting." << std::endl; 
+                sqlite3_close(database);
                 return 0;
             }
             const std::string pwTable = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT\tNULL );";
@@ -56,11 +64,48 @@ int main(int argc, char* argv[]) {
             std::cout << "Initializing..." << std::endl;
             runServer(database);
         }
+        else if (flag == "show") {
+            std::string pw;
+            std::cout << "Please type password to open journal:" << std::endl;
+            std::cin >> std::setw(MAX_NAME) >> pw;
+            if (pw.length() < MINPWLEN) {
+                std::cout << "Invalid password." << std::endl;
+            }
+            else if (checkPassword(database, pw) == 1) {
+                std::cout << "Printing journal entries...\n" << std::endl;
+                if (printEntries(database) < 0) {
+                    sqlite3_close(database);
+                    return -1;
+                }
+            }
+        }
+        else if (flag == "reset") {
+            std::cout << "*** PASSWORD RESET ***" << std::endl;
+            std::string oldPw;
+            std::cout << "Please type the current password:" << std::endl;
+            std::cin >> std::setw(MAX_NAME) >> oldPw;
+            if (oldPw.length() < MINPWLEN) {
+                std::cout << "Invalid password." << std::endl;
+            }
+            else if (checkPassword(database, oldPw) == 1) {
+                std::string newPw;
+                std::cout << "Set a new password:" << std::endl;
+                std::cin >> std::setw(MAX_NAME) >> newPw;
+                if (newPw.length() < MINPWLEN) {
+                    std::cout << "Password must be at least " << MINPWLEN << " characters. Exiting." << std::endl; 
+                }
+                else if (resetPassword(database, newPw)) {
+                    std::cout << "Password changed!" << std::endl;
+                }
+            }
+        }
+        else {
+            printHelp();
+        }
         sqlite3_close(database);
     }
     else {
-        std::cout << "Usage:\ninstall\n\tUse flag install to set password and to start use." << std::endl;
-        std::cout << "run\n\tUse flag run to run the program." << std::endl;
+        printHelp();
     }
     return 0;
 }

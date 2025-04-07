@@ -88,6 +88,25 @@ bool setPassword(sqlite3 *db, std::string password) {
     return true;
 }
 
+bool resetPassword(sqlite3 *db, std::string newPw) {
+    const std::string removeCmd = "DELETE FROM JKEYS;";
+    if (sqlExecute(db, removeCmd, false) < 0) { // remove old password
+        return false;
+    }
+    char* hashedPw = (char*) malloc(crypto_pwhash_STRBYTES);
+    if (hashPassword(newPw, hashedPw) < 0) {
+        free(hashedPw);
+        return false;
+    }
+    std::string strHash(hashedPw);
+    free(hashedPw);
+    const std::string sqlCommand = "INSERT INTO JKEYS (PASSWORD) VALUES(\'" + strHash + "\');";
+    if (sqlExecute(db, sqlCommand, false) < 0) { // set new password
+        return false;
+    }
+    return true;
+}
+
 int saveEntry(sqlite3* db, std::string journalEntry) {
     std::time_t saveTime = std::time(nullptr);
     const std::string sqlCommand = "INSERT INTO JENTRIES VALUES(" + std::to_string(saveTime) + ", \'" + journalEntry +  "\');";
