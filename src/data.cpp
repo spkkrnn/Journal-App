@@ -9,6 +9,13 @@ static int callback(void* data, int argc, char** argv, char** colNames)
     return 0;
 }
 
+static int callbackSalt(void* data, int argc, char** argv, char** colNames) 
+{ 
+    tmpKey = (char*) malloc(crypto_pwhash_SALTBYTES);
+    strncpy(tmpKey, argv[0], crypto_pwhash_SALTBYTES);
+    return 0;
+}
+
 static int callbackPrint(void* data, int argc, char** argv, char** colNames) 
 { 
     int i; 
@@ -21,7 +28,7 @@ static int callbackPrint(void* data, int argc, char** argv, char** colNames)
     } 
     std::cout << std::endl;
     return 0; 
-} 
+}
 
 int sqlExecute(sqlite3* db, const std::string command, bool returnData=false) {
     int sqlError = 0;
@@ -60,6 +67,21 @@ int checkPassword(sqlite3* db, std::string passwd) {
     return retval;
 }
 
+int getSalt(sqlite3* db, char* salt) {
+    const std::string sqlQuery = "SELECT SALT FROM JKEYS;";
+    int sqlError = 0;
+    char* errMsg;
+    sqlError = sqlite3_exec(db, sqlQuery.c_str(), callbackSalt, 0, &errMsg);
+    if (sqlError != SQLITE_OK) {
+        std::cout << "Failed to execute SQL command." << std::endl;
+        sqlite3_free(errMsg);
+        return -1;
+    }
+    strncpy(salt, tmpKey, crypto_pwhash_SALTBYTES);
+    free(tmpKey);
+    return 0;
+}
+
 int hashPassword(std::string passwd, char* stored) {
     char hashed[crypto_pwhash_STRBYTES];
     const char* const p_passwd = (const char* const) passwd.c_str(); // crypto_pwhash_str needs const char* const
@@ -69,19 +91,22 @@ int hashPassword(std::string passwd, char* stored) {
         return -1;
     }
     strncpy(stored, hashed, crypto_pwhash_STRBYTES);
-    std::cout << "Set pw: " << hashed << std::endl;
     return 0;
 }
 
 bool setPassword(sqlite3 *db, std::string password) {
     char* hashedPw = (char*) malloc(crypto_pwhash_STRBYTES);
+    unsigned char salt[crypto_pwhash_SALTBYTES];
+    randombytes_buf(salt, sizeof(salt));
     if (hashPassword(password, hashedPw) < 0) {
         free(hashedPw);
         return false;
     }
     std::string strHash(hashedPw);
     free(hashedPw);
-    const std::string sqlCommand = "INSERT INTO JKEYS (PASSWORD) VALUES(\'" + strHash + "\');";
+    const std::string sqlCommand = "INSERT INTO JKEYS VALUES(\'" + strHash + "\', \'" + std::string((const char*) salt, crypto_pwhash_SALTBYTES) + "\');";
+    //sqlCommand.append((const char*) salt, crypto_pwhash_SALTBYTES);
+    //sqlCommand += std::string("\');");
     if (sqlExecute(db, sqlCommand, false) < 0) {
         return false;
     }
@@ -108,6 +133,10 @@ bool resetPassword(sqlite3 *db, std::string newPw) {
 }
 
 int saveEntry(sqlite3* db, std::string journalEntry) {
+    const std::string sqlQuery = "SELECT SALT FROM JKEYS;";
+    if (sqlExecute(db, sqlQuery, true) < 0) {
+        return -1;
+    }
     std::time_t saveTime = std::time(nullptr);
     const std::string sqlCommand = "INSERT INTO JENTRIES VALUES(" + std::to_string(saveTime) + ", \'" + journalEntry +  "\');";
     int retval = sqlExecute(db, sqlCommand, false);

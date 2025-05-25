@@ -5,6 +5,7 @@ inline Session::Session(std::uint64_t userId, int clientFd) // constructor
     , m_start{ std::time(nullptr) }
     , m_state{ 0 }
     , m_feed{ clientFd }
+    , m_key{ {0} }
 {
 }
 
@@ -20,7 +21,22 @@ inline bool Session::isAuthenticated() const {
     return true;
 }
 
-std::uint64_t formUserId(int address) { // NOTE: Port is unusable since browsers change port every request
+inline int Session::setKey(sqlite3* db, std::string pw) {
+    char* salt = (char*) calloc(crypto_pwhash_SALTBYTES, sizeof(char));
+    if (getSalt(db, salt) < 0) {
+        return -1;
+    }
+    unsigned char key[crypto_box_SEEDBYTES];
+    if (crypto_pwhash(key, sizeof(key), pw.c_str(), pw.length(), (unsigned char*) salt, crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE, crypto_pwhash_ALG_DEFAULT) != 0) {
+        std::cout << "Out of memory!" << std::endl;
+        return -1;
+    }
+    std::string keyStr((char*) key, crypto_box_SEEDBYTES); 
+    this->m_key = keyStr;
+    return 0;
+}
+
+std::uint64_t formUserId(int address) { // NOTE: Port number is unusable since browsers change port every request
     std::uint32_t shift32 = -1;
     std::uint64_t userId = (std::uint64_t) address * (std::uint64_t) shift32; // renewed method
     userId += (std::uint64_t) address;
@@ -120,6 +136,7 @@ int sendResponse(int fileId, int clientFd) {
 int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3* db) {
     int clientState = clientSession->getState();
     int clientFeed = clientSession->getFeed();
+    std::string pw;
     if (*request == 'G') { // GET request
         sendResponse(clientState, clientFeed);
         return 0;
@@ -132,7 +149,7 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         if (divPos < 0 || (divPos >= post.length())) {
             return -1;
         }
-        std::string postContent = post.substr(divPos + 1);
+        std::string postContent = post.substr(divPos + 1); //TODO: sanitize input
         popWhitespaces(postContent);
         if (post.find(HTML_PW_ID) == 0) {
             if (checkPassword(db, postContent) < 1) {
@@ -141,6 +158,7 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
                 clientSession->updateState(0);
                 return 0;
             }
+            pw = postContent;
             clientSession->updateState(1);
         }
         else if (post.find(HTML_TXT_ID) == 0) {
@@ -152,12 +170,12 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
             }
             int newState = (saveEntry(db, postContent) < 0) ? 1 : 2;
             clientSession->updateState(newState);
-            // test print
-            //printEntries(db);
-
         }
         clientState = clientSession->getState();
         sendResponse(clientState, clientFeed);
+        if (!pw.empty()) {
+            clientSession->setKey(db, pw);
+        }
         return 0;
     }
     return -1;

@@ -32,12 +32,14 @@ class Session {
         std::time_t m_start;
         int m_state;
         int m_feed;
+        std::string m_key;
     public:
         Session(std::uint64_t userId, int clientFd);
         int getState() const { return m_state; }
         int getFeed() const { return m_feed; }
         void updateState(int newState) { this->m_state = newState; }
         bool isAuthenticated() const;
+        int setKey(sqlite3 * db, std::string pw);
         ~Session() {}
 };
 

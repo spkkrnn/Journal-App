@@ -40,13 +40,13 @@ int main(int argc, char* argv[]) {
                 sqlite3_close(database);
                 return 0;
             }
-            const std::string pwTable = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT\tNULL );";
+            const std::string pwTable = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT NULL, SALT CHAR NOT NULL );";
             if (sqlExecute(database, pwTable, false) < 0) {
                 std::cout << "Failed to create table for passwords." << std::endl;
                 sqlite3_close(database);
                 return -1;
             }
-            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP NOT NULL, JENTRY TEXT NOT NULL );";
+            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP NOT NULL, JENTRY TEXT NOT NULL, NONCE CHAR NOT NULL );";
             if (sqlExecute(database, entriesTable, false) < 0) {
                 std::cout << "Failed to create table for journal entries." << std::endl;
                 sqlite3_close(database);

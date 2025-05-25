@@ -20,5 +20,6 @@ bool resetPassword(sqlite3 * , std::string );
 int checkPassword(sqlite3 * , std::string );
 int saveEntry(sqlite3 * , std::string );
 int printEntries(sqlite3 * );
+int getSalt(sqlite3 * , char * );
 
 #endif
