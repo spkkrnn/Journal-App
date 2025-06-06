@@ -24,13 +24,16 @@ inline bool Session::isAuthenticated() const {
 inline int Session::setKey(sqlite3* db, std::string pw) {
     char* salt = (char*) calloc(crypto_pwhash_SALTBYTES, sizeof(char));
     if (getSalt(db, salt) < 0) {
+        free(salt);
         return -1;
     }
     unsigned char key[crypto_box_SEEDBYTES];
     if (crypto_pwhash(key, sizeof(key), pw.c_str(), pw.length(), (unsigned char*) salt, crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE, crypto_pwhash_ALG_DEFAULT) != 0) {
         std::cout << "Out of memory!" << std::endl;
+        free(salt);
         return -1;
     }
+    free(salt);
     std::string keyStr((char*) key, crypto_box_SEEDBYTES); 
     this->m_key = keyStr;
     return 0;
@@ -104,6 +107,7 @@ int sendHeader(std::string header, int clientFd) {
         close(clientFd);
         return -1;
     }
+    std::cout << "Header sent." << std::endl; // test print
     return 0;
 }
 
@@ -130,6 +134,7 @@ int sendResponse(int fileId, int clientFd) {
         }
     }
     close(file);
+    std::cout << "Response sent." << std::endl; // test print
     return 0;
 }
 
@@ -168,8 +173,11 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
                 clientSession->updateState(0);
                 return 0;
             }
-            int newState = (saveEntry(db, postContent) < 0) ? 1 : 2;
-            clientSession->updateState(newState);
+            else if (postContent.length() > MIN_ENTRY) {
+                std::string key = clientSession->getKey();
+                int newState = (saveEntry(db, postContent, key) < 0) ? 1 : 2;
+                clientSession->updateState(newState);
+            }
         }
         clientState = clientSession->getState();
         sendResponse(clientState, clientFeed);
@@ -256,7 +264,6 @@ int runServer(sqlite3* db) {
         memset(buffer, 0, BUFSIZE);
         close(client_fd);
         client_fd = -1;
-        //break;
         if (currentSession->getState() == 2) {
             break;
         }

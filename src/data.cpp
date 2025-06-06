@@ -41,6 +41,7 @@ int sqlExecute(sqlite3* db, const std::string command, bool returnData=false) {
     }
     if (sqlError != SQLITE_OK) {
         std::cout << "Failed to execute SQL command." << std::endl;
+        printf("%s\n", errMsg);
         sqlite3_free(errMsg);
         return -1;
     }
@@ -132,13 +133,38 @@ bool resetPassword(sqlite3 *db, std::string newPw) {
     return true;
 }
 
-int saveEntry(sqlite3* db, std::string journalEntry) {
-    const std::string sqlQuery = "SELECT SALT FROM JKEYS;";
-    if (sqlExecute(db, sqlQuery, true) < 0) {
+int encryptEntry(std::string &entry, std::string &key, unsigned char* encrypted, unsigned char* nonce) {
+    unsigned char* entryTxt = (unsigned char *) entry.c_str();
+    randombytes_buf(nonce, sizeof(nonce));
+    int retval = crypto_secretbox_easy(encrypted, entryTxt, (unsigned long long) entry.length(), nonce, (unsigned char *) key.c_str());
+    return retval;
+}
+
+int decryptEntry(unsigned char* decrypted, std::string &key, unsigned char* encrypted, unsigned char* nonce, unsigned long long cryptedLen) {
+    int retval = crypto_secretbox_open_easy(decrypted, encrypted, cryptedLen, nonce, (unsigned char *) key.c_str());
+    return retval;
+} 
+
+int saveEntry(sqlite3* db, std::string journalEntry, std::string key) {
+    // set up variables
+    size_t cryptedLen = crypto_secretbox_MACBYTES + journalEntry.length();
+    size_t entryLen = sodium_base64_ENCODED_LEN(cryptedLen, ENCTYPE);
+    size_t nonceLen = sodium_base64_ENCODED_LEN(crypto_secretbox_NONCEBYTES, ENCTYPE);
+    unsigned char encryptedEntry[cryptedLen];
+    unsigned char nonce[crypto_secretbox_NONCEBYTES];
+    char encodedEntry[entryLen]; 
+    char encodedNonce[nonceLen];
+    // encrypt and encode to base64
+    if (encryptEntry(journalEntry, key, encryptedEntry, nonce) < 0) {
+        std::cout << "Failed to encrypt journal entry." << std::endl;
         return -1;
     }
+    sodium_bin2base64(encodedEntry, entryLen, encryptedEntry, cryptedLen, ENCTYPE);
+    sodium_bin2base64(encodedNonce, nonceLen, nonce, crypto_secretbox_NONCEBYTES, ENCTYPE);
+    // save to database
     std::time_t saveTime = std::time(nullptr);
-    const std::string sqlCommand = "INSERT INTO JENTRIES VALUES(" + std::to_string(saveTime) + ", \'" + journalEntry +  "\');";
+    const std::string sqlCommand = "INSERT INTO JENTRIES (TIME, JENTRY, NONCE, ORIGLEN) VALUES(" + std::to_string(saveTime) + ", \'" + std::string(encodedEntry, entryLen-1) + "\', \'" + std::string(encodedNonce, nonceLen-1) + "\', " + std::to_string(cryptedLen) + ");";
+    std::cout << sqlCommand << std::endl; // test print
     int retval = sqlExecute(db, sqlCommand, false);
     return retval;
 }

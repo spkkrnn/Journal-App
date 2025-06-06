@@ -17,6 +17,7 @@
 
 #define MAX_NAME 128
 #define MAX_TIME 600
+#define MIN_ENTRY 5
 #define QUEUE 10
 #define HTML_PW_ID "skey"
 #define HTML_TXT_ID "entry"
@@ -37,6 +38,7 @@ class Session {
         Session(std::uint64_t userId, int clientFd);
         int getState() const { return m_state; }
         int getFeed() const { return m_feed; }
+        std::string getKey() const { return m_key; }
         void updateState(int newState) { this->m_state = newState; }
         bool isAuthenticated() const;
         int setKey(sqlite3 * db, std::string pw);

@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
                 sqlite3_close(database);
                 return -1;
             }
-            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP NOT NULL, JENTRY TEXT NOT NULL, NONCE CHAR NOT NULL );";
+            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP PRIMARY KEY NOT NULL, JENTRY TEXT NOT NULL, NONCE CHAR NOT NULL, ORIGLEN SMALLINT NOT NULL );";
             if (sqlExecute(database, entriesTable, false) < 0) {
                 std::cout << "Failed to create table for journal entries." << std::endl;
                 sqlite3_close(database);

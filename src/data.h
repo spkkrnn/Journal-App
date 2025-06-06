@@ -13,12 +13,13 @@
 #define BUFSIZE 2048
 #define PWBUFSIZE 256
 #define MINPWLEN 8
+#define ENCTYPE sodium_base64_VARIANT_ORIGINAL
 
 int sqlExecute(sqlite3 * , const std::string, bool );
 bool setPassword(sqlite3 * , std::string );
 bool resetPassword(sqlite3 * , std::string );
 int checkPassword(sqlite3 * , std::string );
-int saveEntry(sqlite3 * , std::string );
+int saveEntry(sqlite3 * , std::string , std::string );
 int printEntries(sqlite3 * );
 int getSalt(sqlite3 * , char * );
 
