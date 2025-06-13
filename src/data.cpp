@@ -18,16 +18,43 @@ static int callbackSalt(void* data, int argc, char** argv, char** colNames)
 
 static int callbackPrint(void* data, int argc, char** argv, char** colNames) 
 { 
-    int i; 
-    //fprintf(stderr, "%s: ", (const char*)data); 
-  
+    int i;
+    size_t origLen = 0;
+    time_t timestamp = 0;
+    std::string nonceB64;
+    unsigned char* jentry;
     for (i = 0; i < argc; i++) {
         std::string row = (argv[i] ? argv[i] : "NULL");
-        std::cout << colNames[i] << ": " << row << std::endl;
-        //printf("%s = %s\n", colNames[i], argv[i] ? argv[i] : "NULL"); 
-    } 
-    std::cout << std::endl;
+        switch (colNames[i][0]) {
+            case 'T':
+                timestamp = std::stoi(row, nullptr);
+                break;
+            case 'N':
+                nonceB64 = row;
+                break;
+            case 'O':
+                origLen = std::stoi(row, nullptr);
+                break;
+            case 'J':
+                if (origLen > 0 && !nonceB64.empty()) {
+                    size_t entryLen = origLen - crypto_secretbox_MACBYTES + 1;
+                    jentry = (unsigned char*) calloc(entryLen, sizeof(char));
+                    decodeAndDecrypt(jentry, row, nonceB64, origLen);
+                    printf("Date: %s %s\n\n", ctime(&timestamp), jentry);
+                    free(jentry);
+                    jentry = nullptr;
+                    nonceB64.clear();
+                    origLen = 0;
+                }
+                break;
+        }
+    }
     return 0; 
+}
+
+void freeTmp() {
+    free(tmpKey);
+    tmpKey = nullptr;
 }
 
 int sqlExecute(sqlite3* db, const std::string command, bool returnData=false) {
@@ -64,7 +91,7 @@ int checkPassword(sqlite3* db, std::string passwd) {
         retval = 1;
     }
     memset(tmpKey, 0, crypto_pwhash_STRBYTES);
-    free(tmpKey);
+    freeTmp();
     return retval;
 }
 
@@ -79,8 +106,29 @@ int getSalt(sqlite3* db, char* salt) {
         return -1;
     }
     strncpy(salt, tmpKey, crypto_pwhash_SALTBYTES);
-    free(tmpKey);
+    freeTmp();
     return 0;
+}
+
+std::string deriveKey(sqlite3* db, std::string pw, bool tmpCopy) {
+    char* salt = (char*) calloc(crypto_pwhash_SALTBYTES, sizeof(char));
+    if (getSalt(db, salt) < 0) {
+        free(salt);
+        return "";
+    }
+    unsigned char key[crypto_box_SEEDBYTES];
+    if (crypto_pwhash(key, sizeof(key), pw.c_str(), pw.length(), (unsigned char*) salt, crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE, crypto_pwhash_ALG_DEFAULT) != 0) {
+        std::cout << "Out of memory!" << std::endl;
+        free(salt);
+        return "";
+    }
+    free(salt);
+    if (tmpCopy) {
+        tmpKey = (char*) malloc(crypto_box_SEEDBYTES);
+        strncpy(tmpKey, (char*) key, crypto_box_SEEDBYTES);
+    }
+    std::string keyStr((char*) key, crypto_box_SEEDBYTES);
+    return keyStr;
 }
 
 int hashPassword(std::string passwd, char* stored) {
@@ -106,8 +154,6 @@ bool setPassword(sqlite3 *db, std::string password) {
     std::string strHash(hashedPw);
     free(hashedPw);
     const std::string sqlCommand = "INSERT INTO JKEYS VALUES(\'" + strHash + "\', \'" + std::string((const char*) salt, crypto_pwhash_SALTBYTES) + "\');";
-    //sqlCommand.append((const char*) salt, crypto_pwhash_SALTBYTES);
-    //sqlCommand += std::string("\');");
     if (sqlExecute(db, sqlCommand, false) < 0) {
         return false;
     }
@@ -140,10 +186,27 @@ int encryptEntry(std::string &entry, std::string &key, unsigned char* encrypted,
     return retval;
 }
 
-int decryptEntry(unsigned char* decrypted, std::string &key, unsigned char* encrypted, unsigned char* nonce, unsigned long long cryptedLen) {
-    int retval = crypto_secretbox_open_easy(decrypted, encrypted, cryptedLen, nonce, (unsigned char *) key.c_str());
+int decodeAndDecrypt(unsigned char* decrypted, std::string encoded, std::string nonce, const size_t cryptedLen) {
+    unsigned char* encrypted = (unsigned char*) calloc(cryptedLen, sizeof(char));
+    const size_t codedLen = encoded.length();
+    if (sodium_base642bin(encrypted, cryptedLen, encoded.c_str(), codedLen, nullptr, nullptr, nullptr, ENCTYPE) < 0) {
+        std::cout << "More space required or could not fully parse." << std::endl;
+    }
+    unsigned char* nonceBytes = (unsigned char*) calloc(crypto_secretbox_NONCEBYTES, sizeof(char));
+    const size_t nonceLen = nonce.length();
+    if (sodium_base642bin(nonceBytes, crypto_secretbox_NONCEBYTES, nonce.c_str(), nonceLen, nullptr, nullptr, nullptr, ENCTYPE) < 0) {
+        std::cout << "More space required or could not fully parse nonce." << std::endl;
+    }
+    int retval = 0;
+    char key[crypto_box_SEEDBYTES];
+    memcpy(key, tmpKey, crypto_box_SEEDBYTES);
+    if (crypto_secretbox_open_easy(decrypted, encrypted, (unsigned long long) cryptedLen, nonceBytes, (unsigned char *) key) != 0) {
+        std::cout << "Decryption error!" << std::endl;
+    }
+    free(encrypted);
+    free(nonceBytes);
     return retval;
-} 
+}
 
 int saveEntry(sqlite3* db, std::string journalEntry, std::string key) {
     // set up variables
@@ -163,13 +226,15 @@ int saveEntry(sqlite3* db, std::string journalEntry, std::string key) {
     sodium_bin2base64(encodedNonce, nonceLen, nonce, crypto_secretbox_NONCEBYTES, ENCTYPE);
     // save to database
     std::time_t saveTime = std::time(nullptr);
-    const std::string sqlCommand = "INSERT INTO JENTRIES (TIME, JENTRY, NONCE, ORIGLEN) VALUES(" + std::to_string(saveTime) + ", \'" + std::string(encodedEntry, entryLen-1) + "\', \'" + std::string(encodedNonce, nonceLen-1) + "\', " + std::to_string(cryptedLen) + ");";
+    const std::string sqlCommand = "INSERT INTO JENTRIES (TIME, NONCE, ORIGLEN, JENTRY) VALUES(" + std::to_string(saveTime) + ", \'" + std::string(encodedNonce, nonceLen-1) + "\', " + std::to_string(cryptedLen) + ", \'" + std::string(encodedEntry, entryLen-1) + "\');";
     std::cout << sqlCommand << std::endl; // test print
     int retval = sqlExecute(db, sqlCommand, false);
     return retval;
 }
 
-int printEntries(sqlite3* db) {
+int printEntries(sqlite3* db, std::string pw) {
+    //tmpKey = (char*) malloc(crypto_box_SEEDBYTES);
+    deriveKey(db, pw, true);
     int sqlError = 0;
     char* errMsg;
     std::string sqlCommand = "SELECT * FROM JENTRIES;";
@@ -177,7 +242,9 @@ int printEntries(sqlite3* db) {
     if (sqlError != SQLITE_OK) {
         std::cout << "Failed to execute SQL command." << std::endl;
         sqlite3_free(errMsg);
+        freeTmp();
         return -1;
     }
+    freeTmp();
     return 0;
 }

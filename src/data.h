@@ -19,8 +19,10 @@ int sqlExecute(sqlite3 * , const std::string, bool );
 bool setPassword(sqlite3 * , std::string );
 bool resetPassword(sqlite3 * , std::string );
 int checkPassword(sqlite3 * , std::string );
+int decodeAndDecrypt(unsigned char* , std::string , std::string , const size_t );
 int saveEntry(sqlite3 * , std::string , std::string );
-int printEntries(sqlite3 * );
+int printEntries(sqlite3 * , std::string );
 int getSalt(sqlite3 * , char * );
+std::string deriveKey(sqlite3 * , std::string , bool=false );
 
 #endif

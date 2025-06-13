@@ -22,20 +22,8 @@ inline bool Session::isAuthenticated() const {
 }
 
 inline int Session::setKey(sqlite3* db, std::string pw) {
-    char* salt = (char*) calloc(crypto_pwhash_SALTBYTES, sizeof(char));
-    if (getSalt(db, salt) < 0) {
-        free(salt);
-        return -1;
-    }
-    unsigned char key[crypto_box_SEEDBYTES];
-    if (crypto_pwhash(key, sizeof(key), pw.c_str(), pw.length(), (unsigned char*) salt, crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE, crypto_pwhash_ALG_DEFAULT) != 0) {
-        std::cout << "Out of memory!" << std::endl;
-        free(salt);
-        return -1;
-    }
-    free(salt);
-    std::string keyStr((char*) key, crypto_box_SEEDBYTES); 
-    this->m_key = keyStr;
+    std::string key = deriveKey(db, pw);
+    this->m_key = key;
     return 0;
 }
 

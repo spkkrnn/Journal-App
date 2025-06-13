@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
                 sqlite3_close(database);
                 return -1;
             }
-            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP PRIMARY KEY NOT NULL, JENTRY TEXT NOT NULL, NONCE CHAR NOT NULL, ORIGLEN SMALLINT NOT NULL );";
+            const std::string entriesTable = "CREATE TABLE JENTRIES(TIME TIMESTAMP PRIMARY KEY NOT NULL, NONCE CHAR NOT NULL, ORIGLEN SMALLINT NOT NULL, JENTRY TEXT NOT NULL );";
             if (sqlExecute(database, entriesTable, false) < 0) {
                 std::cout << "Failed to create table for journal entries." << std::endl;
                 sqlite3_close(database);
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
             }
             else if (checkPassword(database, pw) == 1) {
                 std::cout << "Printing journal entries...\n" << std::endl;
-                if (printEntries(database) < 0) {
+                if (printEntries(database, pw) < 0) {
                     sqlite3_close(database);
                     return -1;
                 }
