@@ -1,3 +1,4 @@
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -8,15 +9,32 @@
       margin:0px;
       text-align:center;
     }
+    a:link, a:visited {
+      border: 2px solid rgb(3 62 62);
+      background-color: #48cccd;
+      color: #f8f8ff;
+      padding: 14px 25px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+}
+
+a:hover, a:active {
+  background-color: #aaf0d1;
+}
 </style>
 </head>
 <body style="background-color:MintCream;">
 <h1>Journal</h1>
 <form action="/saved.html" method="POST">
-    <label for="entry">Journal Entry</label><br>
+    <label for="entry">Write Entry</label><br>
     <textarea name="entry" rows="40" cols="60">Write here</textarea>
     <br>
     <input type="submit" value="Save" formenctype="text/plain"/>
+</form>
+<br><br><br>
+<h3>Read Entries</h3>
+<a href="entries.html">Read</a>
 </form>
 </body>
 </html>

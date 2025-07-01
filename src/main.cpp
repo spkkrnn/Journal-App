@@ -99,6 +99,9 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+        else if (flag == "test") {
+            testFunction();
+        }
         else {
             printHelp();
         }

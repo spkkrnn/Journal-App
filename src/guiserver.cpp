@@ -59,9 +59,58 @@ void popWhitespaces(std::string& text) {
     }
 }
 
+std::string formatEntry(std::string& entry) {
+    int i, escLen = 6;
+    const char escapes[escLen][6] = {"&#34;", "&#38;", "&#39;", "&#59;", "&#60;", "&#62;"}; // ", &, ', ;, <, >
+    const char lineChange[] = "<br>";
+    char outputBuffer[4 * entry.length()];
+    char* ptr = outputBuffer;
+    for (auto c : entry) {
+        i = escLen;
+        switch (c) {
+            case '\"':
+                i = 0;
+                break;
+            case '&':
+                i = 1;
+                break;
+            case '\'':
+                i = 2;
+                break;
+            case ';':
+                i = 3;
+                break;
+            case '<':
+                i = 4;
+                break;
+            case '>':
+                i = 5;
+                break;
+            case '\n':
+                i = -1;
+                break;
+            case '\r':
+                i = -1;
+                break;
+        }
+        if (i < 0) {
+            ptr = stpncpy(ptr, lineChange, 4);
+        }
+        if (i < escLen) {
+            ptr = stpncpy(ptr, escapes[i], 5);
+        }
+        else {
+            *ptr = c;
+            ++ptr;
+        }
+    }
+    *ptr = 0;
+    return std::string(outputBuffer);
+}
+
 const std::string makeHeader(int fileId) {
     std::size_t fileSize = getFileSize(fileId);
-	const std::string header = "HTTP/1.0 200 OK\r\nConnection: Close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
+	const std::string header = "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(fileSize) + "\r\n\r\n";
     return header;
 }
 
@@ -95,7 +144,23 @@ int sendHeader(std::string header, int clientFd) {
         close(clientFd);
         return -1;
     }
-    std::cout << "Header sent." << std::endl; // test print
+    return 0;
+}
+
+int sendPages(std::shared_ptr<Session> clientSession, sqlite3* db) {
+    int clientFd = clientSession->getFeed();
+    std::string key = clientSession->getKey();
+    std::string pageTop = "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"/><title>Journal</title><style>body { margin:0px; text-align:center; } .box > * { border: 2px solid rgb(96 139 168); border-radius: 10px; background-color: rgb(96 139 168 / 0.2); width: 400px; } .box { align-items: center; justify-content: center; margin: auto; flex-basis: auto; min-width: 600px; max-width: 1212px; display: flex; flex-wrap: wrap; }</style></head><body style=\"background-color:MintCream;\"><div class=\"box\">";
+    std::string pageEnd = "</div></body></html>\r\n\r\n";
+    if (sendHeader(pageTop, clientFd) < 0) { // send parts of page utilizing function sendHeader
+        return -1;
+    }
+    if (sendEntries(db, key, clientFd) < 0) {
+        return -1;
+    }
+    if (sendHeader(pageEnd, clientFd) < 0) {
+        return -1;
+    }
     return 0;
 }
 
@@ -126,12 +191,37 @@ int sendResponse(int fileId, int clientFd) {
     return 0;
 }
 
+int sendChunkedResponse(std::shared_ptr<Session> clientSession, sqlite3* db) {
+    const std::string header = "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: text/html\r\n\r\n";
+    int clientFd = clientSession->getFeed();
+    if (sendHeader(header, clientFd) < 0) {
+        return -1;
+    }
+    if (sendPages(clientSession, db) < 0) {
+        return -1;
+    }
+    std::cout << "Chunked response sent." << std::endl;
+    return 0;
+}
+
 int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3* db) {
     int clientState = clientSession->getState();
     int clientFeed = clientSession->getFeed();
     std::string pw;
     if (*request == 'G') { // GET request
-        sendResponse(clientState, clientFeed);
+        if (clientState > 0) {
+            if (!clientSession->isAuthenticated()) {
+                std::string header = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 53\r\n\r\n403 Unauthorized\r\nNot logged in or session timed out.\r\n";
+                sendHeader(header, clientFeed);
+                clientSession->updateState(0);
+                return 0;
+            }
+            sendChunkedResponse(clientSession, db);
+            clientSession->updateState(3);
+        }
+        else {
+            sendResponse(clientState, clientFeed);
+        }
         return 0;
     }
     else if (*request == 'P') { // POST request
@@ -142,7 +232,7 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         if (divPos < 0 || (divPos >= post.length())) {
             return -1;
         }
-        std::string postContent = post.substr(divPos + 1); //TODO: sanitize input
+        std::string postContent = post.substr(divPos + 1);
         popWhitespaces(postContent);
         if (post.find(HTML_PW_ID) == 0) {
             if (checkPassword(db, postContent) < 1) {
@@ -162,8 +252,9 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
                 return 0;
             }
             else if (postContent.length() > MIN_ENTRY) {
+                std::string entry = formatEntry(postContent);
                 std::string key = clientSession->getKey();
-                int newState = (saveEntry(db, postContent, key) < 0) ? 1 : 2;
+                int newState = (saveEntry(db, entry, key) < 0) ? 1 : 2;
                 clientSession->updateState(newState);
             }
         }
@@ -249,10 +340,10 @@ int runServer(sqlite3* db) {
         }
         handleRequest(buffer, currentSession, db);
         // null the buffer and close client feed
-        memset(buffer, 0, BUFSIZE);
         close(client_fd);
         client_fd = -1;
-        if (currentSession->getState() == 2) {
+        memset(buffer, 0, BUFSIZE);
+        if (currentSession->getState() >= 2) {
             break;
         }
     }
@@ -261,4 +352,8 @@ int runServer(sqlite3* db) {
     close(sock);
 
     return 0;
+}
+
+void testFunction() {
+    std::cout << "test" << std::endl;
 }

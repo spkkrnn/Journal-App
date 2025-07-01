@@ -4,7 +4,6 @@
 #include <vector>
 #include <filesystem>
 #include <fcntl.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -25,6 +24,7 @@
 namespace Files {
     const std::string dirPath = std::filesystem::current_path().string() + "/";
     const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html", "saved.html"};
+    const int maxState = htmlFiles.size() - 1;
 }
 
 class Session {
@@ -48,5 +48,6 @@ class Session {
 const std::string makeHeader(int );
 int handleRequest(char *, std::shared_ptr<Session>, sqlite3* );
 int runServer(sqlite3* );
+void testFunction();
 
 #endif

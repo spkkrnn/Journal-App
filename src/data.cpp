@@ -1,6 +1,7 @@
 #include "data.h"
 
 static char* tmpKey = nullptr;
+static int tmpFeed = -1;
 
 static int callback(void* data, int argc, char** argv, char** colNames) 
 { 
@@ -40,7 +41,55 @@ static int callbackPrint(void* data, int argc, char** argv, char** colNames)
                     size_t entryLen = origLen - crypto_secretbox_MACBYTES + 1;
                     jentry = (unsigned char*) calloc(entryLen, sizeof(char));
                     decodeAndDecrypt(jentry, row, nonceB64, origLen);
-                    printf("Date: %s %s\n\n", ctime(&timestamp), jentry);
+                    printf("Date: %s%s\n\n", ctime(&timestamp), jentry);
+                    free(jentry);
+                    jentry = nullptr;
+                    nonceB64.clear();
+                    origLen = 0;
+                }
+                break;
+        }
+    }
+    return 0;
+}
+
+static int callbackWrite(void* data, int argc, char** argv, char** colNames) 
+{
+    if (tmpFeed < 0) {
+        std::cout << "No client feed." << std::endl;
+        return -1;
+    }
+    int i;
+    size_t origLen = 0;
+    time_t timestamp = 0;
+    std::string nonceB64;
+    unsigned char* jentry;
+    for (i = 0; i < argc; i++) {
+        std::string row = (argv[i] ? argv[i] : "NULL");
+        switch (colNames[i][0]) {
+            case 'T':
+                timestamp = std::stoi(row, nullptr);
+                break;
+            case 'N':
+                nonceB64 = row;
+                break;
+            case 'O':
+                origLen = std::stoi(row, nullptr);
+                break;
+            case 'J':
+                if (origLen > 0 && !nonceB64.empty()) {
+                    size_t entryLen = origLen - crypto_secretbox_MACBYTES + 1;
+                    size_t buffLen = entryLen + PADDING;
+                    jentry = (unsigned char*) calloc(entryLen, sizeof(char));
+                    char buffer[buffLen] = {0};
+                    decodeAndDecrypt(jentry, row, nonceB64, origLen);
+                    snprintf(buffer, buffLen, "<div>Date: %s<br><br>%s</div>", ctime(&timestamp), jentry);
+                    if (write(tmpFeed, buffer, strnlen(buffer, buffLen)) < 0) {
+                        perror("error writing journal entry");
+                        close(tmpFeed);
+                        free(jentry);
+                        return -1;
+                    }
                     free(jentry);
                     jentry = nullptr;
                     nonceB64.clear();
@@ -227,7 +276,6 @@ int saveEntry(sqlite3* db, std::string journalEntry, std::string key) {
     // save to database
     std::time_t saveTime = std::time(nullptr);
     const std::string sqlCommand = "INSERT INTO JENTRIES (TIME, NONCE, ORIGLEN, JENTRY) VALUES(" + std::to_string(saveTime) + ", \'" + std::string(encodedNonce, nonceLen-1) + "\', " + std::to_string(cryptedLen) + ", \'" + std::string(encodedEntry, entryLen-1) + "\');";
-    std::cout << sqlCommand << std::endl; // test print
     int retval = sqlExecute(db, sqlCommand, false);
     return retval;
 }
@@ -245,6 +293,25 @@ int printEntries(sqlite3* db, std::string pw) {
         freeTmp();
         return -1;
     }
+    freeTmp();
+    return 0;
+}
+
+int sendEntries(sqlite3* db, std::string key, int clientFeed) {
+    tmpKey = (char*) malloc(crypto_box_SEEDBYTES);
+    strncpy(tmpKey, (char*) key.c_str(), crypto_box_SEEDBYTES);
+    tmpFeed = clientFeed;
+    int sqlError = 0;
+    char* errMsg;
+    std::string sqlCommand = "SELECT * FROM JENTRIES;";
+    sqlError = sqlite3_exec(db, sqlCommand.c_str(), callbackWrite, 0, &errMsg);
+    if (sqlError != SQLITE_OK) {
+        std::cout << "Failed to execute SQL command." << std::endl;
+        sqlite3_free(errMsg);
+        freeTmp();
+        return -1;
+    }
+    tmpFeed = -1;
     freeTmp();
     return 0;
 }
