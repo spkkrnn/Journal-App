@@ -14,7 +14,8 @@
 #define BUFSIZE 4096
 #define PWBUFSIZE 256
 #define MINPWLEN 8
-#define PADDING 64
+#define PADDING 128
+#define HEXPADDING 4
 #define ENCTYPE sodium_base64_VARIANT_ORIGINAL
 
 int sqlExecute(sqlite3 * , const std::string, bool );

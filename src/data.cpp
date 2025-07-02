@@ -81,10 +81,13 @@ static int callbackWrite(void* data, int argc, char** argv, char** colNames)
                     size_t entryLen = origLen - crypto_secretbox_MACBYTES + 1;
                     size_t buffLen = entryLen + PADDING;
                     jentry = (unsigned char*) calloc(entryLen, sizeof(char));
-                    char buffer[buffLen] = {0};
+                    char entryBuff[buffLen] = {0};
+                    char chunkBuff[buffLen] = {0};
                     decodeAndDecrypt(jentry, row, nonceB64, origLen);
-                    snprintf(buffer, buffLen, "<div>Date: %s<br><br>%s</div>", ctime(&timestamp), jentry);
-                    if (write(tmpFeed, buffer, strnlen(buffer, buffLen)) < 0) {
+                    snprintf(entryBuff, buffLen, "<div>Date: %s<br><br>%s</div>", ctime(&timestamp), jentry);
+                    size_t chunkLen = strnlen(entryBuff, buffLen);
+                    snprintf(chunkBuff, buffLen, "%lx\r\n%s\r\n", chunkLen, entryBuff);
+                    if (write(tmpFeed, chunkBuff, strnlen(chunkBuff, buffLen)) < 0) {
                         perror("error writing journal entry");
                         close(tmpFeed);
                         free(jentry);

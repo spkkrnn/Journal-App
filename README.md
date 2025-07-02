@@ -10,8 +10,8 @@ A C++ application for making journal entries with a web GUI.
 - Password can be changed without reinstalling
 - Encryption for journal entries
 - Viewing journal entries in the browser
+- HTTP/1.1 chunked encoding
 
 ## Planned features:
 - Making multiple entries in a single session
-- HTTP/1.1 chunked encoding
 - Visual improvements

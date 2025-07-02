@@ -96,7 +96,7 @@ std::string formatEntry(std::string& entry) {
         if (i < 0) {
             ptr = stpncpy(ptr, lineChange, 4);
         }
-        if (i < escLen) {
+        else if (i < escLen) {
             ptr = stpncpy(ptr, escapes[i], 5);
         }
         else {
@@ -147,18 +147,34 @@ int sendHeader(std::string header, int clientFd) {
     return 0;
 }
 
+int sendChunk(std::string &chunk, int clientFd) {
+    char hexBuff[HEXPADDING];
+    snprintf(hexBuff, HEXPADDING, "%lx", chunk.length());
+    std::string fullChunk = std::string(hexBuff) + "\r\n" + chunk + "\r\n";
+    if (write(clientFd, fullChunk.c_str(), fullChunk.length()) < 0) {
+        perror("writing error");
+        close(clientFd);
+        return -1;
+    }
+    return 0;
+}
+
 int sendPages(std::shared_ptr<Session> clientSession, sqlite3* db) {
     int clientFd = clientSession->getFeed();
     std::string key = clientSession->getKey();
     std::string pageTop = "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"/><title>Journal</title><style>body { margin:0px; text-align:center; } .box > * { border: 2px solid rgb(96 139 168); border-radius: 10px; background-color: rgb(96 139 168 / 0.2); width: 400px; } .box { align-items: center; justify-content: center; margin: auto; flex-basis: auto; min-width: 600px; max-width: 1212px; display: flex; flex-wrap: wrap; }</style></head><body style=\"background-color:MintCream;\"><div class=\"box\">";
-    std::string pageEnd = "</div></body></html>\r\n\r\n";
-    if (sendHeader(pageTop, clientFd) < 0) { // send parts of page utilizing function sendHeader
+    std::string pageEnd = "</div></body></html>";
+    std::string emptyChunk;
+    if (sendChunk(pageTop, clientFd) < 0) { // send parts of page utilizing function sendHeader
         return -1;
     }
     if (sendEntries(db, key, clientFd) < 0) {
         return -1;
     }
-    if (sendHeader(pageEnd, clientFd) < 0) {
+    if (sendChunk(pageEnd, clientFd) < 0) {
+        return -1;
+    }
+    if (sendChunk(emptyChunk, clientFd) < 0) {
         return -1;
     }
     return 0;
@@ -192,7 +208,7 @@ int sendResponse(int fileId, int clientFd) {
 }
 
 int sendChunkedResponse(std::shared_ptr<Session> clientSession, sqlite3* db) {
-    const std::string header = "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: text/html\r\n\r\n";
+    const std::string header = "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: text/html\r\nTransfer-Encoding: chunked\r\n\r\n";
     int clientFd = clientSession->getFeed();
     if (sendHeader(header, clientFd) < 0) {
         return -1;
@@ -226,8 +242,6 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
     }
     else if (*request == 'P') { // POST request
         const std::string post = getPayload(request);
-        // test print
-        std::cout << post << std::endl;
         size_t divPos = post.find("=");
         if (divPos < 0 || (divPos >= post.length())) {
             return -1;
@@ -355,5 +369,13 @@ int runServer(sqlite3* db) {
 }
 
 void testFunction() {
-    std::cout << "test" << std::endl;
+    char buffer[8] = {0};
+    std::string test1 = "Waiting for new log entries...\r\n";
+    size_t tlen1 = test1.length();
+    std::cout << test1.length() << std::endl;
+    unsigned int i = 0;
+    printf("%x\n", i);
+    snprintf(buffer+4, 8, "%lx", tlen1);
+    char* ptr = buffer+4;
+    printf("%lu\n", strnlen(ptr, 4));
 }
