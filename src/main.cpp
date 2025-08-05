@@ -8,6 +8,15 @@ void printHelp() {
     std::cout << "reset\n\tTo change the password, use flag reset." << std::endl;
 }
 
+void hidePassword(size_t pwLen) {
+    std::cout << "\x1b[1F";
+    for (unsigned int i = 0; i < pwLen; i++) {
+        std::cout << "*" << std::flush;
+        usleep(HIDE_PW_SPEED);
+    }
+    std::cout << std::endl;
+}
+
 int main(int argc, char* argv[]) {
     if (argc == 2) {
         std::string flag(argv[1]);
@@ -16,6 +25,10 @@ int main(int argc, char* argv[]) {
         }
         // check if database exists
         bool installed = std::filesystem::exists(Files::dirPath + DBFILE);
+        if ((!installed) && (flag != "install")) {
+            std::cout << "Program not installed! Please use flag install to set a password and create a database." << std::endl;
+            return 0;
+        }
         // open SQL database
         sqlite3* database;
         int sqlError = 0;
@@ -40,6 +53,7 @@ int main(int argc, char* argv[]) {
                 sqlite3_close(database);
                 return 0;
             }
+            hidePassword(pw.length());
             const std::string pwTable = "CREATE TABLE JKEYS(PASSWORD CHAR PRIMARY KEY NOT NULL, SALT CHAR NOT NULL );";
             if (sqlExecute(database, pwTable, false) < 0) {
                 std::cout << "Failed to create table for passwords." << std::endl;

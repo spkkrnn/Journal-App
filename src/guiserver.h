@@ -18,6 +18,7 @@
 #define MAX_TIME 600
 #define MIN_ENTRY 5
 #define QUEUE 10
+#define HIDE_PW_SPEED 50000
 #define HTML_PW_ID "skey"
 #define HTML_TXT_ID "entry"
 
