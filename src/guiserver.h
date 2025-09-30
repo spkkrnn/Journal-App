@@ -24,7 +24,7 @@
 
 namespace Files {
     const std::string dirPath = std::filesystem::current_path().string() + "/";
-    const std::vector<std::string> htmlFiles = {"index.html", "mainpage.html", "saved.html"};
+    const std::vector<std::string> htmlFiles = {"login.html", "mainpage.html", "saved.html"};
     const int maxState = htmlFiles.size() - 1;
 }
 

@@ -11,7 +11,7 @@
 #define DATA_H
 
 #define DBFILE "pages.db"
-#define BUFSIZE 4096
+#define BUFSIZE 8192
 #define PWBUFSIZE 256
 #define MINPWLEN 8
 #define PADDING 128

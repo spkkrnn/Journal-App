@@ -162,7 +162,7 @@ int sendChunk(std::string &chunk, int clientFd) {
 int sendPages(std::shared_ptr<Session> clientSession, sqlite3* db) {
     int clientFd = clientSession->getFeed();
     std::string key = clientSession->getKey();
-    std::string pageTop = "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"/><title>Journal</title><style>body { margin:0px; text-align:center; } .box > * { border: 2px solid rgb(96 139 168); border-radius: 10px; background-color: rgb(96 139 168 / 0.2); width: 400px; } .box { align-items: center; justify-content: center; margin: auto; flex-basis: auto; min-width: 600px; max-width: 1212px; display: flex; flex-wrap: wrap; }</style></head><body style=\"background-color:MintCream;\"><div class=\"box\">";
+    std::string pageTop = "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"/><title>Journal</title><style>body { margin:0px; text-align:center; } .box > * { border: 2px solid rgb(96 139 168); border-radius: 10px; background-color: rgb(96 139 168 / 0.2); width: 400px; } .box { align-items: center; justify-content: center; margin: auto; flex-basis: auto; min-width: 600px; max-width: 1212px; display: flex; flex-wrap: wrap; overflow-wrap: break-word; }</style></head><body style=\"background-color:MintCream;\"><div class=\"box\">";
     std::string pageEnd = "</div></body></html>";
     std::string emptyChunk;
     if (sendChunk(pageTop, clientFd) < 0) { // send parts of page utilizing function sendHeader
@@ -203,7 +203,6 @@ int sendResponse(int fileId, int clientFd) {
         }
     }
     close(file);
-    std::cout << "Response sent." << std::endl; // test print
     return 0;
 }
 
@@ -220,6 +219,15 @@ int sendChunkedResponse(std::shared_ptr<Session> clientSession, sqlite3* db) {
     return 0;
 }
 
+char getRequestedInitial(char* request) {
+    char* c = request;
+    for (int i = 0; i < BUFSIZE; i++) {
+        c++;
+        if (*c == '/') return *++c;
+    }
+    return -1;
+}
+
 int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3* db) {
     int clientState = clientSession->getState();
     int clientFeed = clientSession->getFeed();
@@ -232,12 +240,26 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
                 clientSession->updateState(0);
                 return 0;
             }
-            sendChunkedResponse(clientSession, db);
-            clientSession->updateState(3);
+            if (clientState == 1) { // after loggin in
+                sendChunkedResponse(clientSession, db);
+                clientSession->updateState(3);
+                return 0;
+            }
+            if (clientState == 2) { // after saving entry
+                char requested = getRequestedInitial(request);
+                if (requested == 'm') {
+                    clientState = 1;
+                    clientSession->updateState(clientState);
+                }
+                else {
+                    std::string header = "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nProgram terminated.\r\n";
+                    sendHeader(header, clientFeed);
+                    clientSession->updateState(3);
+                    return 0;
+                }
+            }
         }
-        else {
-            sendResponse(clientState, clientFeed);
-        }
+        sendResponse(clientState, clientFeed);
         return 0;
     }
     else if (*request == 'P') { // POST request
@@ -248,7 +270,7 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         }
         std::string postContent = post.substr(divPos + 1);
         popWhitespaces(postContent);
-        if (post.find(HTML_PW_ID) == 0) {
+        if (post.find(HTML_PW_ID) == 0) { // POST password
             if (checkPassword(db, postContent) < 1) {
                 std::string header = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\n403 Forbidden\r\n";
                 sendHeader(header, clientFeed);
@@ -256,9 +278,12 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
                 return 0;
             }
             pw = postContent;
+            if (!pw.empty()) {
+                clientSession->setKey(db, pw);
+            }
             clientSession->updateState(1);
         }
-        else if (post.find(HTML_TXT_ID) == 0) {
+        else if (post.find(HTML_TXT_ID) == 0) { // POST journal entry
             if (!clientSession->isAuthenticated()) {
                 std::string header = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Length: 53\r\n\r\n403 Unauthorized\r\nNot logged in or session timed out.\r\n";
                 sendHeader(header, clientFeed);
@@ -274,9 +299,6 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
         }
         clientState = clientSession->getState();
         sendResponse(clientState, clientFeed);
-        if (!pw.empty()) {
-            clientSession->setKey(db, pw);
-        }
         return 0;
     }
     return -1;
@@ -285,7 +307,7 @@ int handleRequest(char* request, std::shared_ptr<Session> clientSession, sqlite3
 int runServer(sqlite3* db) {
     unsigned short port = 8989;
     unsigned short max_port = port + 10; // try 10 times to bind port
-
+    bool initialInstructions = true;
     int client_fd;
     char* buffer = (char*) calloc(BUFSIZE, sizeof(char));
     std::map<std::uint64_t, std::shared_ptr<Session>> userList;
@@ -328,7 +350,10 @@ int runServer(sqlite3* db) {
 		    return -1;
 	    }
         std::cout << "Listening for connections..." << std::endl;
-
+        if (initialInstructions) {
+            std::cout << "Open http://localhost:" << port << "/login in your browser." << std::endl;
+            initialInstructions = false;
+        }
         // receive connection
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
@@ -357,7 +382,7 @@ int runServer(sqlite3* db) {
         close(client_fd);
         client_fd = -1;
         memset(buffer, 0, BUFSIZE);
-        if (currentSession->getState() >= 2) {
+        if (currentSession->getState() >= 3) {
             break;
         }
     }
@@ -366,16 +391,4 @@ int runServer(sqlite3* db) {
     close(sock);
 
     return 0;
-}
-
-void testFunction() {
-    char buffer[8] = {0};
-    std::string test1 = "Waiting for new log entries...\r\n";
-    size_t tlen1 = test1.length();
-    std::cout << test1.length() << std::endl;
-    unsigned int i = 0;
-    printf("%x\n", i);
-    snprintf(buffer+4, 8, "%lx", tlen1);
-    char* ptr = buffer+4;
-    printf("%lu\n", strnlen(ptr, 4));
 }

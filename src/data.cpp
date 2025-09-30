@@ -84,7 +84,7 @@ static int callbackWrite(void* data, int argc, char** argv, char** colNames)
                     char entryBuff[buffLen] = {0};
                     char chunkBuff[buffLen] = {0};
                     decodeAndDecrypt(jentry, row, nonceB64, origLen);
-                    snprintf(entryBuff, buffLen, "<div>Date: %s<br><br>%s</div>", ctime(&timestamp), jentry);
+                    snprintf(entryBuff, buffLen, "<div><b>Date: %s</b><br><br>%s</div>", ctime(&timestamp), jentry);
                     size_t chunkLen = strnlen(entryBuff, buffLen);
                     snprintf(chunkBuff, buffLen, "%lx\r\n%s\r\n", chunkLen, entryBuff);
                     if (write(tmpFeed, chunkBuff, strnlen(chunkBuff, buffLen)) < 0) {
