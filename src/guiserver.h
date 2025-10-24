@@ -21,6 +21,7 @@
 #define HIDE_PW_SPEED 50000
 #define HTML_PW_ID "skey"
 #define HTML_TXT_ID "entry"
+#define MDAYS ((const int[]){31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31})
 
 namespace Files {
     const std::string dirPath = std::filesystem::current_path().string() + "/";

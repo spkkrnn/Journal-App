@@ -1,10 +1,10 @@
-#include "data.h"
 #include "guiserver.h"
 
 void printHelp() {
-    std::cout << "Usage:\ninstall\n\tUse flag install to set password and to start use." << std::endl;
+    std::cout << "Usage:\ninstall\n\tWith the install flag you can set a password and the database is created." << std::endl;
     std::cout << "run\n\tUse flag run to run the program." << std::endl;
-    std::cout << "show\n\tYou can print all journal entries with the show flag." << std::endl;
+    std::cout << "show\n\tPrints all journal entries unless a time window is provided. You may print entries between specific months with arguments in MMYY format." << std::endl;
+    std::cout << "\tExample: show 0925 1125\n\tPrints entries from September, October and November 2025." << std::endl;
     std::cout << "reset\n\tTo change the password, use flag reset." << std::endl;
 }
 
@@ -17,10 +17,27 @@ void hidePassword(size_t pwLen) {
     std::cout << std::endl;
 }
 
+time_t convertTime(std::string userTime, bool end=false) {
+    if (userTime.length() != 4) return -1;
+    int month = std::stoi(userTime.substr(0, 2), nullptr) - 1; // ADD: exception handling
+    int year = std::stoi(userTime.substr(2, 2), nullptr) + 100;
+    struct tm dateTime = {.tm_mon = month, .tm_year = year};
+    if (end) { // Could just increment month by one?
+        int lastDay = MDAYS[month];
+        if (month == 1 && year % 4 == 0) { // leap year
+            lastDay++;
+        }
+        dateTime.tm_mday = lastDay;
+        dateTime.tm_min = 59;
+        dateTime.tm_sec = 60;
+    }
+    return mktime(&dateTime);
+}
+
 int main(int argc, char* argv[]) {
-    if (argc == 2) {
+    if (argc >= 2) {
         std::string flag(argv[1]);
-        if (flag[0] == '-') {
+        while (flag[0] == '-') {
             flag.erase(0, 1);
         }
         // check if database exists
@@ -78,19 +95,32 @@ int main(int argc, char* argv[]) {
             std::cout << "Initializing..." << std::endl;
             runServer(database);
         }
-        else if (flag == "show") {
+        else if (flag == "show" || flag == "print") {
             std::string pw;
             std::cout << "Please type password to open journal:" << std::endl;
             std::cin >> std::setw(MAX_NAME) >> pw;
+            hidePassword(pw.length());
             if (pw.length() < MINPWLEN) {
                 std::cout << "Invalid password." << std::endl;
             }
             else if (checkPassword(database, pw) == 1) {
+                if (argc > 2) {
+                    time_t start = convertTime(argv[2]);
+                    time_t end = (argc > 3) ? convertTime(argv[3], true) : std::time(nullptr);
+                    std::cout << start << " and " << end << std::endl;
+                    if (start > 0 && end > 0 && end > start) {
+                        setTimes(start, end);
+                    }
+                    else {
+                        std::cout << "Invalid time(s) to search. Use flag help for syntax." << std::endl;
+                    }
+                }
                 std::cout << "Printing journal entries...\n" << std::endl;
                 if (printEntries(database, pw) < 0) {
                     sqlite3_close(database);
                     return -1;
                 }
+                setTimes(0, 0);
             }
         }
         else if (flag == "reset") {
@@ -98,6 +128,7 @@ int main(int argc, char* argv[]) {
             std::string oldPw;
             std::cout << "Please type the current password:" << std::endl;
             std::cin >> std::setw(MAX_NAME) >> oldPw;
+            hidePassword(oldPw.length());
             if (oldPw.length() < MINPWLEN) {
                 std::cout << "Invalid password." << std::endl;
             }
@@ -105,6 +136,7 @@ int main(int argc, char* argv[]) {
                 std::string newPw;
                 std::cout << "Set a new password:" << std::endl;
                 std::cin >> std::setw(MAX_NAME) >> newPw;
+                hidePassword(newPw.length());
                 if (newPw.length() < MINPWLEN) {
                     std::cout << "Password must be at least " << MINPWLEN << " characters. Exiting." << std::endl; 
                 }

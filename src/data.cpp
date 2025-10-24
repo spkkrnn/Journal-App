@@ -2,6 +2,8 @@
 
 static char* tmpKey = nullptr;
 static int tmpFeed = -1;
+static time_t tmpStart = 0;
+static time_t tmpEnd = 0;
 
 static int callback(void* data, int argc, char** argv, char** colNames) 
 { 
@@ -19,16 +21,20 @@ static int callbackSalt(void* data, int argc, char** argv, char** colNames)
 
 static int callbackPrint(void* data, int argc, char** argv, char** colNames) 
 { 
-    int i;
     size_t origLen = 0;
     time_t timestamp = 0;
     std::string nonceB64;
     unsigned char* jentry;
-    for (i = 0; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         std::string row = (argv[i] ? argv[i] : "NULL");
         switch (colNames[i][0]) {
             case 'T':
                 timestamp = std::stoi(row, nullptr);
+                if (tmpEnd > 0) {
+                    if ((timestamp < tmpStart) || (timestamp > tmpEnd)) {
+                        i += 3; // out of desired range, skip entry
+                    }
+                }
                 break;
             case 'N':
                 nonceB64 = row;
@@ -59,12 +65,11 @@ static int callbackWrite(void* data, int argc, char** argv, char** colNames)
         std::cout << "No client feed." << std::endl;
         return -1;
     }
-    int i;
     size_t origLen = 0;
     time_t timestamp = 0;
     std::string nonceB64;
     unsigned char* jentry;
-    for (i = 0; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         std::string row = (argv[i] ? argv[i] : "NULL");
         switch (colNames[i][0]) {
             case 'T':
@@ -277,14 +282,13 @@ int saveEntry(sqlite3* db, std::string journalEntry, std::string key) {
     sodium_bin2base64(encodedEntry, entryLen, encryptedEntry, cryptedLen, ENCTYPE);
     sodium_bin2base64(encodedNonce, nonceLen, nonce, crypto_secretbox_NONCEBYTES, ENCTYPE);
     // save to database
-    std::time_t saveTime = std::time(nullptr);
+    time_t saveTime = std::time(nullptr);
     const std::string sqlCommand = "INSERT INTO JENTRIES (TIME, NONCE, ORIGLEN, JENTRY) VALUES(" + std::to_string(saveTime) + ", \'" + std::string(encodedNonce, nonceLen-1) + "\', " + std::to_string(cryptedLen) + ", \'" + std::string(encodedEntry, entryLen-1) + "\');";
     int retval = sqlExecute(db, sqlCommand, false);
     return retval;
 }
 
 int printEntries(sqlite3* db, std::string pw) {
-    //tmpKey = (char*) malloc(crypto_box_SEEDBYTES);
     deriveKey(db, pw, true);
     int sqlError = 0;
     char* errMsg;
@@ -317,4 +321,9 @@ int sendEntries(sqlite3* db, std::string key, int clientFeed) {
     tmpFeed = -1;
     freeTmp();
     return 0;
+}
+
+void setTimes(time_t start, time_t end) {
+    tmpStart = start;
+    tmpEnd = end;
 }

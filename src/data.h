@@ -28,5 +28,6 @@ int saveEntry(sqlite3 * , std::string , std::string );
 int printEntries(sqlite3 * , std::string );
 int sendEntries(sqlite3 * , std::string , int );
 std::string deriveKey(sqlite3 * , std::string , bool=false );
+void setTimes(time_t , time_t );
 
 #endif

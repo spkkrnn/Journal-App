@@ -2,8 +2,8 @@
 A C++ application for making journal entries with a web GUI. The journal requires a password to log in, and the journal entries are encrypted and saved to an SQL database.
 
 ## Required libraries
-Libsodium
-SQLite
+- Libsodium
+- SQLite
 
 ## Installation and usage
 Can be compiled in the project's src folder like so, for example:
