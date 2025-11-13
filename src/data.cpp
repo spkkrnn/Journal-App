@@ -29,9 +29,15 @@ static int callbackPrint(void* data, int argc, char** argv, char** colNames)
         std::string row = (argv[i] ? argv[i] : "NULL");
         switch (colNames[i][0]) {
             case 'T':
-                timestamp = std::stoi(row, nullptr);
+                try {
+                    timestamp = std::stoi(row, nullptr);
+                }
+                catch (std::invalid_argument& e) {
+                    std::cout << "Corrupted timestamp: " << row << std::endl;
+                    i += 3; // skip entry
+                }
                 if (tmpEnd > 0) {
-                    if ((timestamp < tmpStart) || (timestamp > tmpEnd)) {
+                    if (timestamp < tmpStart || timestamp > tmpEnd) {
                         i += 3; // out of desired range, skip entry
                     }
                 }
@@ -40,7 +46,13 @@ static int callbackPrint(void* data, int argc, char** argv, char** colNames)
                 nonceB64 = row;
                 break;
             case 'O':
-                origLen = std::stoi(row, nullptr);
+                try {
+                    origLen = std::stoi(row, nullptr);
+                }
+                catch (std::invalid_argument& e) {
+                    std::cout << "Corrupted length: " << origLen << std::endl;
+                    i++; // skip entry
+                }
                 break;
             case 'J':
                 if (origLen > 0 && !nonceB64.empty()) {
@@ -73,13 +85,25 @@ static int callbackWrite(void* data, int argc, char** argv, char** colNames)
         std::string row = (argv[i] ? argv[i] : "NULL");
         switch (colNames[i][0]) {
             case 'T':
-                timestamp = std::stoi(row, nullptr);
+                try {
+                    timestamp = std::stoi(row, nullptr);
+                }
+                catch (std::invalid_argument& e) {
+                    std::cout << "Corrupted timestamp: " << row << std::endl;
+                    i += 3;
+                }
                 break;
             case 'N':
                 nonceB64 = row;
                 break;
             case 'O':
-                origLen = std::stoi(row, nullptr);
+                try {
+                    origLen = std::stoi(row, nullptr);
+                }
+                catch (std::invalid_argument& e) {
+                    std::cout << "Corrupted length: " << origLen << std::endl;
+                    i++;
+                }
                 break;
             case 'J':
                 if (origLen > 0 && !nonceB64.empty()) {

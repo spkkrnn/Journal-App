@@ -18,9 +18,15 @@ void hidePassword(size_t pwLen) {
 }
 
 time_t convertTime(std::string userTime, bool end=false) {
-    if (userTime.length() != 4) return -1;
-    int month = std::stoi(userTime.substr(0, 2), nullptr) - 1; // ADD: exception handling
-    int year = std::stoi(userTime.substr(2, 2), nullptr) + 100;
+    if (userTime.length() != 4) return -1; // input needs to be MMYY
+    int month, year;
+    try {
+        month = std::stoi(userTime.substr(0, 2), nullptr) - 1;
+        year = std::stoi(userTime.substr(2, 2), nullptr) + 100;
+    }
+    catch (std::invalid_argument& e) {
+        return -1;
+    }
     struct tm dateTime = {.tm_mon = month, .tm_year = year};
     if (end) { // Could just increment month by one?
         int lastDay = MDAYS[month];
@@ -28,6 +34,7 @@ time_t convertTime(std::string userTime, bool end=false) {
             lastDay++;
         }
         dateTime.tm_mday = lastDay;
+        dateTime.tm_hour = 23;
         dateTime.tm_min = 59;
         dateTime.tm_sec = 60;
     }
@@ -107,12 +114,13 @@ int main(int argc, char* argv[]) {
                 if (argc > 2) {
                     time_t start = convertTime(argv[2]);
                     time_t end = (argc > 3) ? convertTime(argv[3], true) : std::time(nullptr);
-                    std::cout << start << " and " << end << std::endl;
-                    if (start > 0 && end > 0 && end > start) {
+                    if (start > 0 && end > start) {
                         setTimes(start, end);
                     }
                     else {
-                        std::cout << "Invalid time(s) to search. Use flag help for syntax." << std::endl;
+                        std::cout << "\U00002757 Invalid date(s) to search. Use flag help for syntax." << std::endl;
+                        sqlite3_close(database);
+                        return 0;
                     }
                 }
                 std::cout << "Printing journal entries...\n" << std::endl;
